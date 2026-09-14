@@ -1,4 +1,4 @@
-# Disputatio
+# Disput
 
 Put two independently-hosted, OpenAI-API-compatible models into a live,
 turn-based dialogue with each other - no copy/paste between them. They
@@ -39,7 +39,7 @@ python3 -m pip install -e .
 ## Run
 
 ```bash
-disputatio          # if installed via -e .
+disput          # if installed via -e .
 # or
 python3 main.py     # no install needed
 ```
@@ -54,12 +54,12 @@ stop.
 
 ## Where things live
 
-- `disputatio/config.py` - saved source presets, stored at
-  `~/.disputatio/presets.json` (outside the repo, deliberately - so API keys
+- `disput/config.py` - saved source presets, stored at
+  `~/.disput/presets.json` (outside the repo, deliberately - so API keys
   never end up in git even once this repo goes public).
-- `disputatio/client.py` - talking to a model, splitting out its reasoning
+- `disput/client.py` - talking to a model, splitting out its reasoning
   trace, extracting fenced code blocks.
-- `disputatio/app.py` - the Textual TUI: the setup wizard and the live
+- `disput/app.py` - the Textual TUI: the setup wizard and the live
   dialogue screen.
 - `dialogue_output/` and `transcripts/` are generated at runtime and
   gitignored.
@@ -69,5 +69,5 @@ stop.
 Built against [Unsloth Desktop](https://unsloth.ai), which exposes each
 loaded local model on its own port via an OpenAI-compatible API
 (`/v1/chat/completions`, `/v1/models`). Any other OpenAI-API-compatible
-server works the same way - Disputatio only assumes the standard schema plus
+server works the same way - Disput only assumes the standard schema plus
 optional `reasoning_content` / inline `<think>` tags for reasoning traces.

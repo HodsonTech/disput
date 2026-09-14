@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference only - not read at runtime. Real presets live at ~/.disputatio/presets.json (outside the repo) so API keys never end up in git. Disputatio also lets you add a source interactively on first run, which writes this file for you.",
+  "_comment": "Reference only - not read at runtime. Real presets live at ~/.disput/presets.json (outside the repo) so API keys never end up in git. Disput also lets you add a source interactively on first run, which writes this file for you.",
   "sources": [
     {
       "name": "My local Unsloth server",

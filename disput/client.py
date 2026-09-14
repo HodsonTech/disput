@@ -91,7 +91,7 @@ def call_model(client: OpenAI, cfg: ModelConfig, history: list[dict], temperatur
     if cfg.enabled_tools:
         extra_body["enable_tools"] = True
         extra_body["enabled_tools"] = cfg.enabled_tools
-        extra_body["session_id"] = f"disputatio-{cfg.label}"
+        extra_body["session_id"] = f"disput-{cfg.label}"
 
     resp = client.chat.completions.create(
         model=cfg.model,

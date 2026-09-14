@@ -1,4 +1,4 @@
-# Disputatio
+# Disput
 
 ## What this is
 
@@ -12,25 +12,25 @@ model (currently either a dense ~27B or an MoE ~26B-A4B), but the source/
 model pickers are fully generic - any OpenAI-compatible endpoint works.
 
 **File location:** all files below live in `/Users/jeff/Dev Folder/model_dialogue/`
-(the git repo is named `disputatio`; the local folder name predates the
+(the git repo is named `disput`; the local folder name predates the
 rename and was left as-is deliberately - renaming it would have disrupted
 the running session's working-directory tracking).
 
 ## Layout
 
 - `main.py` - entry point (`python3 main.py`), no install required.
-- `disputatio/config.py` - saved source presets (name/base_url/api_key/
-  enabled_tools), persisted at `~/.disputatio/presets.json` - **outside the
+- `disput/config.py` - saved source presets (name/base_url/api_key/
+  enabled_tools), persisted at `~/.disput/presets.json` - **outside the
   repo on purpose**, so API keys can never end up committed, even
   accidentally, once this repo goes public.
-- `disputatio/client.py` - `list_models()` (queries `/v1/models` live for the
+- `disput/client.py` - `list_models()` (queries `/v1/models` live for the
   source picker), `call_model()` (reasoning-trace splitting, same dual
   handling as before: a `reasoning_content` field OR inline
   `<think>...</think>` tags), and code-block extraction/saving.
-- `disputatio/app.py` - the Textual app: `SourceSetupScreen` (pick/add a
+- `disput/app.py` - the Textual app: `SourceSetupScreen` (pick/add a
   source -> fetch its models -> pick one -> label + system prompt; run once
   per side), `TopicScreen`, `DialogueScreen` (the live turn loop).
-- `pyproject.toml` - `pip install -e .` gives a `disputatio` console script.
+- `pyproject.toml` - `pip install -e .` gives a `disput` console script.
 - `presets.example.json` - documentation only, never read at runtime.
 - `dialogue_output/` and `transcripts/` - generated at runtime, gitignored.
 - Legacy artifacts from the old two-script version
@@ -43,7 +43,7 @@ the running session's working-directory tracking).
   typically served locally via **Unsloth Desktop**, which exposes each
   loaded model on its own port (`/v1/chat/completions`, `/v1/models`, auth
   via `Authorization: Bearer <key>`).
-- Two sources are pre-seeded in `~/.disputatio/presets.json` from the prior
+- Two sources are pre-seeded in `~/.disput/presets.json` from the prior
   setup:
   - **2B (Windows PC, remote)** - `http://www.kc5ods.com:32764/v1`, a
     separate Windows PC (RTX 5080), port-forwarded through NAT so it's
@@ -67,7 +67,7 @@ the running session's working-directory tracking).
   the other model's turns as `user`) - not a single shared transcript
   object.
 - **Reasoning traces** are shown in a collapsible panel per turn in the TUI
-  and written to `transcripts/disputatio_<session>_reasoning.log`, but are
+  and written to `transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -
   scratch space, not something the other model should treat as "said."
 - **Round count is dynamic.** Set at setup (default 6); when reached, the
@@ -81,7 +81,7 @@ the running session's working-directory tracking).
   saved to `dialogue_output/<session>/turn_NN_<label>_<i>.<ext>`, language
   guessed from the fence tag.
 - Transcript is written continuously (not just at the end) to
-  `transcripts/disputatio_<session>.md`, each turn's reasoning wrapped in a
+  `transcripts/disput_<session>.md`, each turn's reasoning wrapped in a
   collapsible `<details><summary>🧠 Thinking</summary>` block.
 
 ## Known open items

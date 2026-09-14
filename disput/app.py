@@ -1,4 +1,4 @@
-"""Disputatio's TUI: setup wizard (pick/add a source, discover its models,
+"""Disput's TUI: setup wizard (pick/add a source, discover its models,
 pick one, set a label + system prompt - twice, once per side) followed by
 a live dialogue screen."""
 
@@ -293,12 +293,12 @@ class DialogueScreen(Screen):
 
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-        self.transcript_path = TRANSCRIPTS_DIR / f"disputatio_{session_id}.md"
-        self.reasoning_path = TRANSCRIPTS_DIR / f"disputatio_{session_id}_reasoning.log"
+        self.transcript_path = TRANSCRIPTS_DIR / f"disput_{session_id}.md"
+        self.reasoning_path = TRANSCRIPTS_DIR / f"disput_{session_id}_reasoning.log"
         self.code_dir = OUTPUT_DIR / session_id
 
         self.transcript_lines = [
-            f"# Disputatio Session\n",
+            f"# Disput Session\n",
             f"**Topic:** {topic}\n",
             f"**Model A:** {cfg_a.label} ({cfg_a.model})\n",
             f"**Model B:** {cfg_b.label} ({cfg_b.model})\n",
@@ -461,8 +461,8 @@ class DialogueScreen(Screen):
 # ============================== App ================================
 
 
-class DisputatioApp(App):
-    TITLE = "Disputatio"
+class DisputApp(App):
+    TITLE = "Disput"
     CSS = """
     #step-title { padding: 1 2; text-style: bold; }
     #body { padding: 1 2; height: auto; }
@@ -493,7 +493,7 @@ class DisputatioApp(App):
 
 
 def run() -> None:
-    DisputatioApp().run()
+    DisputApp().run()
 
 
 if __name__ == "__main__":

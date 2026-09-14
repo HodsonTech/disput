@@ -10,7 +10,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".disputatio"
+CONFIG_DIR = Path.home() / ".disput"
 PRESETS_PATH = CONFIG_DIR / "presets.json"
 
 
