@@ -1,0 +1,19 @@
+[project]
+name = "disputatio"
+version = "0.1.0"
+description = "Put two OpenAI-API-compatible models into a live, turn-based dialogue in a TUI."
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0",
+    "textual>=0.60",
+]
+
+[project.scripts]
+disputatio = "disputatio.app:run"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["disputatio"]

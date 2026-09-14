@@ -1,0 +1,11 @@
+{
+  "_comment": "Reference only - not read at runtime. Real presets live at ~/.disputatio/presets.json (outside the repo) so API keys never end up in git. Disputatio also lets you add a source interactively on first run, which writes this file for you.",
+  "sources": [
+    {
+      "name": "My local Unsloth server",
+      "base_url": "http://localhost:8888/v1",
+      "api_key": "sk-...",
+      "enabled_tools": ["python", "terminal", "web_search"]
+    }
+  ]
+}

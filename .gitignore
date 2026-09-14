@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Generated at runtime - not source
+transcripts/
+dialogue_output/
+
+# Legacy output from the pre-TUI scripts, kept locally but never committed
+dialogue_transcript_*.md
+reasoning_feed_*.log
+
+.DS_Store
