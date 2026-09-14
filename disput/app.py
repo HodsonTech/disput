@@ -396,7 +396,7 @@ class DialogueScreen(Screen):
             return
 
         if value:
-            injected = f"[Moderator note from Jeff]: {value}"
+            injected = f"[Moderator note]: {value}"
             self.history_a.append({"role": "user", "content": injected})
             self.history_b.append({"role": "user", "content": injected})
             self.mount_note(f"🗣  Moderator: {value}")

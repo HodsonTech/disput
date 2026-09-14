@@ -6,6 +6,23 @@ critique and sanity-check each other rather than one deferring just because
 it's bigger, and can converge on and write code together. Runs as a
 full-screen terminal interface, not a script you re-run with different flags.
 
+## Why
+
+Built to let on-prem LLMs reach **consensus** with each other rather than
+trust either one unsupervised - a second, independently-reasoning model as
+a check against hallucination and drift, not a bigger model assumed correct
+by default.
+
+The original pairing was a 2B model (`MiniCPM5-2B`) against a 27B model
+(`Qwen3.8-27B`), later swapped for a 26B-A4B MoE model (`Gemma-4-26B-A4B`)
+in the larger seat for noticeably faster inference. The two also ran on
+genuinely different hardware from the start - one on a PC with an RTX 5080,
+the other on a Mac with 48GB of RAM - deliberately disparate models on
+disparate hardware, not two instances of the same weights. Whether that
+disparity actually makes hallucination and drift easier to catch, versus
+just producing two models that disagree for unrelated reasons, is still an
+open question worth testing more, not a settled result.
+
 ## What it does
 
 - Interactively pick (or add) a **source** - an OpenAI-compatible endpoint

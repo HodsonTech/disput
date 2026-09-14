@@ -13,3 +13,6 @@ dialogue_transcript_*.md
 reasoning_feed_*.log
 
 .DS_Store
+
+# Real infra details (hostnames, ports, rationale) - never goes public
+PRIVATE_NOTES.md

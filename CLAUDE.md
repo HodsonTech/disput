@@ -11,10 +11,34 @@ disk). Originally built around a small 2B model debating a larger local
 model (currently either a dense ~27B or an MoE ~26B-A4B), but the source/
 model pickers are fully generic - any OpenAI-compatible endpoint works.
 
-**File location:** all files below live in `/Users/jeff/Dev Folder/model_dialogue/`
-(the git repo is named `disput`; the local folder name predates the
-rename and was left as-is deliberately - renaming it would have disrupted
-the running session's working-directory tracking).
+**File location:** the git repo is named `disput`; the local working
+directory's name predates the rename and was left as-is deliberately -
+renaming it would have disrupted the running session's working-directory
+tracking.
+
+**Real infra details** (actual hostnames/ports for the pre-seeded sources)
+live in `PRIVATE_NOTES.md`, which is gitignored and never leaves this
+machine - this file only describes things generically.
+
+## Origin
+
+Built to let on-prem LLMs reach **consensus** with each other rather than
+trust either one unsupervised - a second, independently-reasoning model as
+a check against hallucination and drift, not a bigger model assumed correct
+by default. (Consensus, not quorum: quorum is about clearing a minimum
+headcount before a vote counts; with exactly two participants there's no
+threshold to clear, the actual goal is the two of them converging on the
+same answer independently.)
+
+The original pairing was `MiniCPM5-2B` against `Qwen3.8-27B`; `Gemma-4-26B-
+A4B` (MoE) later replaced Qwen as the larger model - same role, noticeably
+faster inference. The two also ran on genuinely different hardware from the
+start: the 2B on a Windows PC with an RTX 5080, the 27B/26B-A4B on a Mac
+with 48GB of RAM - deliberately disparate models on disparate hardware, not
+just two instances of the same weights. Whether that disparity actually
+makes hallucination/drift easier to catch (versus just producing two models
+disagreeing for unrelated reasons) is still an open question - extensive
+testing is needed here, this isn't a settled result.
 
 ## Layout
 
@@ -44,16 +68,13 @@ the running session's working-directory tracking).
   loaded model on its own port (`/v1/chat/completions`, `/v1/models`, auth
   via `Authorization: Bearer <key>`).
 - Two sources are pre-seeded in `~/.disput/presets.json` from the prior
-  setup:
-  - **2B (Windows PC, remote)** - `http://www.kc5ods.com:32764/v1`, a
-    separate Windows PC (RTX 5080), port-forwarded through NAT so it's
-    reachable from anywhere, not just the home LAN. Traffic is plain HTTP,
-    not HTTPS (deliberate - Jeff mostly uses this tethered to phone/cellular,
-    not open Wi-Fi; TLS reverse proxy / Tailscale deferred as unnecessary
-    complexity for that threat model).
-  - **Local Mac (Unsloth)** - `http://localhost:8888/v1`. Port may need
-    reconfirming via the in-app model picker (it calls `/v1/models` live) if
-    Unsloth assigns a different port for a different loaded model.
+  setup: a remote 2B model on a separate Windows PC (reachable over the
+  public internet via a NAT port-forward, deliberately plain HTTP rather
+  than HTTPS for a threat model where that's an acceptable tradeoff), and a
+  larger local model served by Unsloth Desktop on the Mac running the
+  script. See `PRIVATE_NOTES.md` (gitignored, local-only) for the actual
+  hostnames/ports - not repeated here since this file is meant to be safe
+  to make public.
 - Unsloth's server-side tools (`python`, `terminal`, `web_search`) are wired
   through per-source `enabled_tools`, sent via `extra_body` fields
   (`enable_tools`, `enabled_tools`, `session_id`) since they're not part of
@@ -76,7 +97,7 @@ the running session's working-directory tracking).
 - **Moderator injection**: the moderator input box is live throughout the
   run (not a timed window like the old scripts) - type a note and press
   Enter any time to inject it into both models' history as
-  `[Moderator note from Jeff]: ...` without stopping the loop.
+  `[Moderator note]: ...` without stopping the loop.
 - **Code extraction**: any fenced code block in a reply is pulled out and
   saved to `dialogue_output/<session>/turn_NN_<label>_<i>.<ext>`, language
   guessed from the fence tag.
