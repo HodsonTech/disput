@@ -679,6 +679,12 @@ class DisputApp(App):
     .turn-header.turn-a { color: $success; }
     .turn-header.turn-b { color: $warning; }
     .note { color: $text-muted; text-style: italic; padding: 0 1; }
+    /* CollapsibleTitle defaults to width: auto - only as wide as the label
+       text itself, left-anchored - while the bar you see spans the full
+       container width. Clicking anywhere on that bar past the label did
+       nothing. Widening the title to fill the row makes the whole thing
+       clickable, matching what it visually looks like. */
+    Collapsible > CollapsibleTitle { width: 1fr; }
     """
 
     def on_mount(self) -> None:
