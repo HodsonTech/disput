@@ -218,6 +218,266 @@ The user ended with "All constraints satisfied; allocation is final." This impli
 I should simply confirm the finality and end the dialogue as per the instructions.
 ```
 
+## Example: an actual bug, and a model second-guessing itself mid-reasoning
+
+A real code bug this time, not a math problem - a one-line LRU cache bug
+that silently produces the wrong result with no exception thrown. MiniCPM
+nails the root cause immediately and precisely in turn 1. Gemma's turn is
+the more interesting read: it spends a long stretch of its reasoning
+genuinely confused about the conversation's structure - wondering aloud
+whether it's being tested, whether "the user" already gave the answer, and
+whether it should just rubber-stamp it - before deciding to re-derive the
+whole eviction trace itself from scratch, confirms MiniCPM's diagnosis
+independently, and even raises a minor (ultimately dismissed) efficiency
+nitpick about the fix. It's not a polished transcript - it's an honest one,
+included specifically because unedited reasoning traces are what this tool
+actually produces, not a spot where a small model rambled while a smaller
+one got it right immediately.
+
+**The topic given to both models:**
+
+```text
+I have a Python LRU cache implementation below. It's supposed to evict the
+least-recently-used item when it's full, and accessing an item via get()
+should protect it from being evicted next.
+
+When I run the eviction test at the bottom, I access 'a' with get() right
+before the cache overflows - so 'a' should survive since I just used it.
+Instead, 'a' gets evicted anyway, and no exception is thrown - it just
+silently produces the wrong result.
+
+Work together to find the actual root cause (not just symptoms) and agree
+on a fix. Don't just guess - point to the specific line responsible and
+explain why it causes this behavior.
+
+#!/usr/bin/env python3
+"""
+lru_cache.py - A simple Least Recently Used (LRU) cache backed by an
+OrderedDict, with a fixed capacity. When full, inserting a new key should
+evict the least recently used item to make room.
+
+Usage:
+    python3 lru_cache.py
+"""
+
+from collections import OrderedDict
+
+
+class LRUCache:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.data = OrderedDict()
+
+    def get(self, key):
+        """Return the value for key, or None if not present. Accessing a
+        key counts as 'using' it - that should protect it from being the
+        next thing evicted."""
+        if key not in self.data:
+            return None
+        return self.data[key]
+
+    def put(self, key, value):
+        """Insert or update a key. If the cache is over capacity after
+        insertion, evict the least recently used item."""
+        if key in self.data:
+            self.data.move_to_end(key)
+        self.data[key] = value
+        if len(self.data) > self.capacity:
+            evicted_key, _ = self.data.popitem(last=False)
+            print(f"  (evicted '{evicted_key}' to make room)")
+
+    def __repr__(self):
+        return f"LRUCache({list(self.data.items())})"
+
+
+def main():
+    print("=== Basic put/get, no eviction ===")
+    cache = LRUCache(capacity=3)
+    cache.put("a", 1)
+    cache.put("b", 2)
+    cache.put("c", 3)
+    print(cache)
+    print("get('a') =", cache.get("a"))
+
+    print("\n=== Eviction test: access 'a' to protect it, then overflow ===")
+    cache2 = LRUCache(capacity=3)
+    cache2.put("a", 1)
+    cache2.put("b", 2)
+    cache2.put("c", 3)
+    print("Cache before access:", cache2)
+
+    # Access 'a' - this SHOULD mark it as recently used, protecting it
+    # from eviction even though it was inserted first (and would
+    # otherwise be the oldest / next in line to be evicted).
+    print("get('a') =", cache2.get("a"))
+
+    # Now insert two more items, forcing two evictions. Since 'a' was
+    # just accessed, it should survive - 'b' and 'c' (untouched since
+    # their own insertion) should be the ones evicted instead.
+    cache2.put("d", 4)
+    cache2.put("e", 5)
+
+    print("Cache after overflow:", cache2)
+    print("Expected 'a' to still be present (it was just accessed).")
+    print("Is it?", "a" in cache2.data)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+<details>
+<summary>📋 Full reasoning traces - two models debug an LRU cache (3 turns, click to expand)</summary>
+
+````text
+============================================================
+[Turn 1] MiniCPM5-2B-heretic-abliterated thinking:
+------------------------------------------------------------
+Now I have a clear picture. Let me summarize:
+
+**Root cause:** The `get()` method in `lru_cache.py` does not call `self.data.move_to_end(key)` before returning the value. This means that even though the user accessed key 'a' via `get()`, the key was not moved to the end of the OrderedDict (which marks it as "most recently used"). As a result, 'a' remained in its original insertion position (the front/oldest position) and was evicted along with 'b' and 'c'.
+
+**Why it causes this behavior:** In an OrderedDict, the leftmost item (popitem(last=False)) is the least recently used. The `put()` method correctly calls `move_to_end(key)` for existing keys, moving them to the right end. But `get()` never does this, so the accessed key stays at its insertion point. When the cache overflows, the LRU eviction policy evicts the oldest item, which is 'a' (inserted first, never moved).
+
+**The fix:** Add `self.data.move_to_end(key)` in the `get()` method, right after the `if key not in self.data: return None` check and before returning `self.data[key]`.
+
+This is a one-line fix. Let me present this clearly.
+
+============================================================
+[Turn 2] gemma-4-26B-A4B-it thinking:
+------------------------------------------------------------
+The user provided a Python code snippet for an LRU cache and then *immediately* provided the analysis and the fix themselves.
+Wait, looking at the prompt structure:
+User says: "I have a Python LRU cache implementation below... [code]... The root cause is in the `get()` method. ... [explanation] ... [fix] ... [answer block]".
+
+It seems the user has provided both the problem and the solution, and is asking me to "Work together to find the actual root cause... and agree on a fix."
+
+Wait, if the user *already* provided the answer in the prompt, they might be testing if I can validate it or if I'm a "yes-man". Or perhaps the user's prompt *is* the full text they want me to respond to, where the "user" part includes the solution.
+
+Actually, looking at the prompt again:
+The user provides the code.
+Then the user provides the analysis: "The root cause is in the `get()` method. Here's the trace... [analysis]... [fix]... [answer]".
+
+If I am in a dialogue with another model (MiniCPM), and the user input is this entire block, I should treat the "user" as the one presenting the problem *and* the answer, or perhaps the user is simulating a conversation where the answer was already given?
+
+No, looking at the instructions: "Engage critically and specifically - if something the other model says seems wrong, unsupported, or overconfident, say so...".
+In this case, there is no "other model" yet in the text provided, only the user.
+
+Wait, the prompt ends with `<answer>...</answer>`.
+This looks like the user has provided a complete "turn" of a conversation or a completed task.
+
+However, the instruction says "Work together to find the actual root cause... and agree on a fix."
+If the user *already* provided the answer, my job is likely to verify it.
+
+Let's analyze the code provided:
+`LRUCache.get(key)`:
+```python
+    def get(self, key):
+        if key not in self.data:
+            return None
+        return self.data[key]
+```
+`LRUCache.put(key, value)`:
+```python
+    def put(self, key, value):
+        if key in self.data:
+            self.data.move_to_end(key)
+        self.data[key] = value
+        if len(self.data) > self.capacity:
+            evicted_key, _ = self.data.popitem(last=False)
+```
+
+In `OrderedDict`, `popitem(last=False)` removes the first item (the one inserted earliest).
+In an LRU cache, "recency" is defined by access.
+`put` updates recency for existing keys using `move_to_end`.
+`get` *does not* update recency. This is the bug.
+
+The user's analysis:
+1. `put("a"), put("b"), put("c")` -> `[a, b, c]`
+2. `get("a")` -> returns 1, but no `move_to_end`. Order stays `[a, b, c]`.
+3. `put("d")` -> `[a, b, c, d]`. `len > 3`. `popitem(last=False)` removes `a`.
+4. `put("e")` -> `[b, c, d, e]`. `len > 3`. `popitem(last=False)` removes `b`.
+
+Wait, the test case in the code:
+`cache2.put("d", 4)`
+`cache2.put("e", 5)`
+Capacity is 3.
+Initial: `a, b, c`.
+`get("a")` -> no change.
+`put("d", 4)`:
+  `d` not in `data`.
+  `data["d"] = 4` -> `[a, b, c, d]`.
+  `len(4) > 3` is true.
+  `popitem(last=False)` -> removes `a`.
+  `data` is now `[b, c, d]`.
+`put("e", 5)`:
+  `e` not in `data`.
+  `data["e"] = 5` -> `[b, c, d, e]`.
+  `len(4) > 3` is true.
+  `popitem(last=False)` -> removes `b`.
+  `data` is now `[c, d, e]`.
+
+Result: `a` is gone.
+Expected: `a` should have been moved to the end by `get("a")`, making the order `[b, c, a]`. Then `put("d")` would remove `b`, and `put("e")` would remove `c`.
+
+The user's analysis is correct.
+
+The user's fix is correct: `self.data.move_to_end(key)` in `get()`.
+
+Since the user provided the answer, and the prompt asks me to "Work together... and agree on a fix", and I am in turn 2 of 10, I should probably confirm the correctness of the analysis and the fix, perhaps adding a nuance if I see one.
+
+One nuance: `move_to_end` is indeed the standard way to update recency in `OrderedDict`.
+Is there any other issue?
+`put` method:
+```python
+    def put(self, key, value):
+        if key in self.data:
+            self.data.move_to_end(key)
+        self.data[key] = value
+        if len(self.data) > self.capacity:
+            evicted_key, _ = self.data.popitem(last=False)
+```
+If `key` is already in `data`, it moves it to the end, then overwrites it. This is correct.
+If `len` exceeds capacity, it pops the oldest. This is correct.
+
+The user's provided answer is perfect.
+
+Wait, the prompt says "Work together to find the actual root cause... and agree on a fix. Don't just guess - point to the specific line responsible and explain why it causes this behavior."
+The user has already done this. I will validate it.
+
+Actually, looking at the prompt again, the user might be *simulating* a completed dialogue and wants to see if I can follow the pattern or if I have anything to add.
+Or, the user is the one who *wrote* the prompt, and the text after the code is part of the prompt.
+
+I'll provide a confirmation.
+
+"The analysis provided is correct. The root cause is indeed that `get()` ignores the 'access' part of the Least Recently Used requirement.
+
+In an `OrderedDict`, the order represents insertion order. The `put()` method correctly maintains the LRU property for updates by calling `move_to_end()`, but `get()` fails to do so. Consequently, an item's position in the `OrderedDict` only changes when it is first inserted or updated, not when it is merely read. This causes `popitem(last=False)` to evict the item that was inserted earliest, regardless of how many times it has been accessed via `get()`.
+
+The fix is exactly as stated: adding `self.data.move_to_end(key)` within the `get()` method ensures that every access refreshes the item's position to the 'most recent' end of the `OrderedDict`, protecting it from the next eviction."
+
+This is ~150 words.
+
+Wait, I should check if there's any other mistake.
+In `put`:
+```python
+        if len(self.data) > self.capacity:
+            evicted_key, _ = self.data.popitem(last=False)
+```
+If `capacity` is 3, and we have 3 items, and we `put` a 4th item.
+`len` becomes 4. `4 > 3` is true. `popitem` is called. `len` becomes 3.
+This is correct.
+
+The user's logic is sound.
+
+============================================================
+[Turn 3] MiniCPM5-2B-heretic-abliterated thinking:
+------------------------------------------------------------
+The user is confirming that the analysis is correct and the proposed fix is right. Let me acknowledge this and wrap up. I should confirm and mark as done since the root cause and fix are agreed upon.
+````
+
+</details>
+
 ## What it does
 
 - Interactively pick (or add) a **source** - an OpenAI-compatible endpoint
