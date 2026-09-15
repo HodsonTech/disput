@@ -1,6 +1,6 @@
 """Persistent storage for saved model sources (endpoint + key + default tools).
 
-Lives outside the repo entirely (``~/.dialectic/presets.json``) so API keys
+Lives outside the repo entirely (``~/.disput/presets.json``) so API keys
 never end up in a directory that gets git-committed or, later, made public.
 """
 
@@ -34,9 +34,17 @@ def save_sources(sources: list[Source]) -> None:
     PRESETS_PATH.write_text(json.dumps({"sources": [asdict(s) for s in sources]}, indent=2))
 
 
-def upsert_source(source: Source) -> None:
-    """Add a new source, or overwrite the existing one with the same name."""
+def upsert_source(source: Source, old_name: str | None = None) -> None:
+    """Add a new source, or overwrite an existing one with the same name.
+
+    Pass `old_name` when editing a source that may have been renamed, so the
+    entry under its previous name is removed instead of left behind as a
+    stale duplicate.
+    """
     sources = load_sources()
-    sources = [s for s in sources if s.name != source.name]
+    names_to_drop = {source.name}
+    if old_name:
+        names_to_drop.add(old_name)
+    sources = [s for s in sources if s.name not in names_to_drop]
     sources.append(source)
     save_sources(sources)

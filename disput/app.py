@@ -63,7 +63,10 @@ class SourceSetupScreen(Screen):
     """One full pass of: pick-or-add a source -> fetch its models -> pick a
     model -> set label + system prompt. Dismisses with a ModelConfig."""
 
-    BINDINGS = [("escape", "app.pop_screen", "Back")]
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        ("e", "edit_highlighted_source", "Edit source"),
+    ]
 
     def __init__(self, side_label: str, other_label: str) -> None:
         super().__init__()
@@ -72,6 +75,7 @@ class SourceSetupScreen(Screen):
         self.chosen_source: cfgstore.Source | None = None
         self.chosen_model: str | None = None
         self._sources: list[cfgstore.Source] = []
+        self._editing_source: cfgstore.Source | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -98,8 +102,19 @@ class SourceSetupScreen(Screen):
         self.set_body(
             Static("Pick a saved source, or add a new one:"),
             OptionList(*options, id="source-list"),
+            Static("[dim]Enter: use it   •   e: edit the highlighted source[/dim]"),
         )
         self.query_one("#source-list", OptionList).focus()
+
+    def action_edit_highlighted_source(self) -> None:
+        try:
+            option_list = self.query_one("#source-list", OptionList)
+        except Exception:
+            return
+        idx = option_list.highlighted
+        if idx is None or idx >= len(self._sources):
+            return
+        self.show_custom_source_step(editing=self._sources[idx])
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         list_id = event.option_list.id
@@ -120,13 +135,19 @@ class SourceSetupScreen(Screen):
 
     # -- step 1b: add a new source ---------------------------------------
 
-    def show_custom_source_step(self) -> None:
+    def show_custom_source_step(self, editing: cfgstore.Source | None = None) -> None:
+        self._editing_source = editing
+        title = f"Editing '{editing.name}' (change the name to save as a new source instead):" if editing else "New source:"
         self.set_body(
-            Static("New source:"),
-            Input(placeholder="Name (e.g. Local Mac / Unsloth)", id="src-name"),
-            Input(placeholder="Base URL (e.g. http://localhost:8888/v1)", id="src-url"),
-            Input(placeholder="API key", password=True, id="src-key"),
-            Input(placeholder="Server-side tools, comma-separated (optional, e.g. python,terminal)", id="src-tools"),
+            Static(title),
+            Input(value=editing.name if editing else "", placeholder="Name (e.g. Local Mac / Unsloth)", id="src-name"),
+            Input(value=editing.base_url if editing else "", placeholder="Base URL (e.g. http://localhost:8888/v1)", id="src-url"),
+            Input(value=editing.api_key if editing else "", placeholder="API key", password=True, id="src-key"),
+            Input(
+                value=",".join(editing.enabled_tools) if editing else "",
+                placeholder="Server-side tools, comma-separated (optional, e.g. python,terminal)",
+                id="src-tools",
+            ),
             Button("Save & Continue", id="save-source-btn", variant="primary"),
         )
         self.query_one("#src-name", Input).focus()
@@ -151,12 +172,13 @@ class SourceSetupScreen(Screen):
         key = self.query_one("#src-key", Input).value.strip()
         tools_raw = self.query_one("#src-tools", Input).value.strip()
         tools = [t.strip() for t in tools_raw.split(",") if t.strip()]
+        editing = self._editing_source
         if not name or not url:
             self.set_body(Static("[red]Name and base URL are both required.[/red]"))
-            self.set_timer(1.5, self.show_custom_source_step)
+            self.set_timer(1.5, lambda: self.show_custom_source_step(editing))
             return
         source = cfgstore.Source(name=name, base_url=url, api_key=key, enabled_tools=tools)
-        cfgstore.upsert_source(source)
+        cfgstore.upsert_source(source, old_name=editing.name if editing else None)
         self.chosen_source = source
         self.fetch_models()
 
