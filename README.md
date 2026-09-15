@@ -44,6 +44,12 @@ open question worth testing more, not a settled result.
   whenever they have one - they can keep discussing after, and post an
   updated one later if it's refined. The panel always shows the latest one,
   so you don't have to read through the back-and-forth to find it.
+- **Stops the self-congratulation loop early**: if both models independently
+  signal they genuinely have nothing more to add, the dialogue pauses with
+  the same extend-or-stop prompt used at the turn limit - instead of
+  grinding through the rest of a turn count set up front just to agree with
+  each other some more. Requires *both* sides to agree, not just one, and
+  never quits on its own either way.
 - Type into the moderator box at any time to inject a note into both models'
   history without stopping the conversation.
 - Any fenced code block either model writes is automatically saved to

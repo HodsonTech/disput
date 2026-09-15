@@ -91,14 +91,16 @@ testing is needed here, this isn't a settled result.
   and written to `transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -
   scratch space, not something the other model should treat as "said."
-- **Silent per-call system-prompt injection**: `take_turn()` appends two
+- **Silent per-call system-prompt injection**: `take_turn()` appends three
   notes to `cfg.system_prompt` for that call only (never touching the real
   `cfg_a`/`cfg_b`, never shown in the transcript/log):
   - a turn-budget note ("turn N of TOTAL, M remaining, pace yourself") so
     neither model is guessing how much runway is left, recomputed fresh
     every turn so it stays accurate across an extend;
   - an answer-tag note asking each model to wrap its current best answer in
-    `<answer>...</answer>` once it has one (see below).
+    `<answer>...</answer>` once it has one (see below);
+  - a `[DONE]` note asking each model to say so once it genuinely has
+    nothing more to add (see mutual-convergence below).
 - **Current Answer panel**: `client.py`'s `call_model()` extracts an
   `<answer>...</answer>` block into `ModelReply.answer` without stripping it
   out of `final` (stripping risked an empty history entry if a reply was
@@ -109,6 +111,20 @@ testing is needed here, this isn't a settled result.
   read the whole back-and-forth. Same truncation-for-display-only pattern
   as the topic banner (see Known open items / the topic-banner incident) -
   the transcript always gets the full text.
+- **Mutual-convergence early stop**: unlike `<answer>`, a model's `[DONE]`
+  signal is pure metadata (never the substantive content of a reply), so
+  `call_model()` strips it out of `final` entirely rather than just
+  extracting a copy - parsed into `ModelReply.done`. `DialogueScreen`
+  tracks `self._converged = {"A": bool, "B": bool}`, updated to that side's
+  `reply.done` on every one of its turns (so a stale "done" from many turns
+  back can't combine with a fresh one - each flag reflects only that side's
+  *most recent* turn). Only once **both** are `True` simultaneously does it
+  do anything: resets both flags and reuses the exact same
+  `awaiting_extend` prompt as hitting the turn limit. Deliberately requires
+  both sides, not one - a single model declaring victory isn't trustworthy
+  enough to cut a real discussion short, and reusing `awaiting_extend`
+  means it inherits all of that path's existing safety (nothing here can
+  silently quit the app either).
 - **Round count is dynamic.** Set at setup (default 6); when reached, the
   dialogue pauses and the same moderator input box doubles as an "extend by
   how many more?" prompt. A number extends; `stop`/`q`/`quit`/`no`/empty
