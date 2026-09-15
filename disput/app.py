@@ -691,7 +691,13 @@ class DisputApp(App):
     #log { padding: 1 2; }
     #status { padding: 0 2; color: $text-muted; height: 1; }
     #moderator-input { margin: 0 1 1 1; }
-    .turn { margin-bottom: 1; border-left: thick $accent; padding: 0 1; }
+    /* Vertical defaults to height: 1fr - it was competing with every other
+       turn for a fractional share of #log's VISIBLE VIEWPORT rather than
+       sizing to its own content. As more turns got mounted, everyone's
+       slice kept shrinking (confirmed: an early turn's region collapsed to
+       height=0 once enough later turns existed) - text wasn't scrolling
+       out of view, its container was actually being crushed to nothing. */
+    .turn { height: auto; margin-bottom: 1; border-left: thick $accent; padding: 0 1; }
     .turn-header.turn-a { color: $success; }
     .turn-header.turn-b { color: $warning; }
     .note { color: $text-muted; text-style: italic; padding: 0 1; }
