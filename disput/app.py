@@ -425,6 +425,8 @@ class DialogueScreen(Screen):
         self.turn_in_progress = False
         self._error_side: str | None = None
         self._abort_requested = False
+        self._latest_answer: str | None = None
+        self._latest_answer_meta: tuple[int, str] | None = None  # (turn_no, label)
         self._current_client: OpenAI | None = None
         self._turn_started_at: float | None = None
 
@@ -446,6 +448,7 @@ class DialogueScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(f"[b]Topic:[/b] {self._topic_banner_text()}", id="topic-banner")
+        yield Static(self._answer_panel_text(), id="answer-panel")
         yield VerticalScroll(id="log")
         yield Static("", id="status")
         yield Input(placeholder="Type a moderator note and press Enter (or just watch it run)...", id="moderator-input")
@@ -486,7 +489,17 @@ class DialogueScreen(Screen):
                 f"running low, work toward a concrete conclusion instead of continuing to go back "
                 f"and forth.]"
             )
-            call_cfg = replace_dataclass(cfg, system_prompt=cfg.system_prompt + budget_note)
+            # Same silent-injection trick: once there's a concrete answer,
+            # get it out of the back-and-forth and into something the user
+            # can see without reading N turns of the two of you agreeing
+            # with each other.
+            answer_note = (
+                "\n\n[If you and the other model have arrived at a concrete answer, wrap it in "
+                "<answer>...</answer> tags so it can be shown clearly - you can keep discussing "
+                "afterward, and post a new <answer> block later if you refine it. Don't repeat an "
+                "unchanged answer block turn after turn once nothing new has been added.]"
+            )
+            call_cfg = replace_dataclass(cfg, system_prompt=cfg.system_prompt + budget_note + answer_note)
             reply = call_model(client, call_cfg, history)
         except Exception as exc:  # noqa: BLE001 - network/backend error, surface and pause rather than crash
             if self._abort_requested:
@@ -589,6 +602,14 @@ class DialogueScreen(Screen):
 
         self.history_a.append({"role": "assistant" if current == "A" else "user", "content": reply.final})
         self.history_b.append({"role": "assistant" if current == "B" else "user", "content": reply.final})
+
+        if reply.answer:
+            self._latest_answer = reply.answer
+            self._latest_answer_meta = (turn_no, cfg.label)
+            self.query_one("#answer-panel", Static).update(self._answer_panel_text())
+            self.transcript_lines.append(
+                f"**✅ Current answer (as of Turn {turn_no} — {cfg.label}):**\n\n{reply.answer}\n"
+            )
 
         self._append_transcript_turn(turn_no, cfg, reply)
         if reply.thinking:
@@ -718,6 +739,24 @@ class DialogueScreen(Screen):
             + f"… [{len(topic)} chars total - shown truncated, sent to both models in full]"
         )
 
+    ANSWER_PANEL_PREVIEW_CHARS = 500
+
+    def _answer_panel_text(self) -> str:
+        if self._latest_answer is None:
+            return "[dim]No answer proposed yet.[/dim]"
+        turn_no, label = self._latest_answer_meta
+        text = self._latest_answer
+        # Same lesson as the topic banner: this panel isn't scrollable, so
+        # an unbounded answer could crush the log the same way a huge
+        # pasted topic did. Only the on-screen preview is shortened - the
+        # transcript always gets the full, untruncated answer.
+        if len(text) > self.ANSWER_PANEL_PREVIEW_CHARS:
+            text = (
+                text[: self.ANSWER_PANEL_PREVIEW_CHARS].rstrip()
+                + f"… [{len(text)} chars total - see turn {turn_no} in the log for the full text]"
+            )
+        return f"[b]✅ Current answer[/b] (as of Turn {turn_no} — {label}):\n\n{text}"
+
     def set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(text)
 
@@ -782,6 +821,7 @@ class DisputApp(App):
        rows on a very narrow terminal - the banner must never be able to
        push the actual conversation log out of view. */
     #topic-banner { padding: 1 2; border-bottom: solid $accent; max-height: 8; overflow-y: hidden; }
+    #answer-panel { padding: 1 2; border-bottom: solid $success; max-height: 10; overflow-y: hidden; }
     #log { padding: 1 2; }
     #status { padding: 0 2; color: $text-muted; height: 1; }
     #moderator-input { margin: 0 1 1 1; }

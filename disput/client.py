@@ -16,6 +16,13 @@ from openai import OpenAI
 # exposing as a separate response field.
 THINK_PATTERN = re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE)
 
+# Matches a model's own <answer>...</answer> block - models are silently
+# instructed (see app.py's per-call system-prompt note) to wrap their
+# current best answer in one of these once they have one, so it can be
+# pulled out and shown clearly instead of making the user hunt for it
+# through several turns of back-and-forth.
+ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL | re.IGNORECASE)
+
 # ```lang\n...code...\n``` fenced blocks, used both for display and for
 # extraction to disk.
 CODE_FENCE_PATTERN = re.compile(r"```([a-zA-Z0-9_+\-]*)\n(.*?)```", re.DOTALL)
@@ -80,6 +87,7 @@ class ModelReply:
     thinking: str | None
     final: str
     code_blocks: list[tuple[str, str]]  # (language, code)
+    answer: str | None = None
 
 
 # Generous on purpose - local/CPU inference and heavy "thinking" models can
@@ -140,7 +148,15 @@ def call_model(
 
     code_blocks = [(lang.strip().lower(), code.strip()) for lang, code in CODE_FENCE_PATTERN.findall(final)]
 
-    return ModelReply(thinking=thinking, final=final, code_blocks=code_blocks)
+    # Deliberately NOT stripped out of `final`: that string also becomes
+    # this turn's entry in both models' ongoing conversation history, and
+    # removing the tag risks leaving an empty message there if a reply was
+    # nothing but an answer block - this is just an extracted copy for the
+    # UI to surface prominently, not a replacement for the real text.
+    answer_match = ANSWER_PATTERN.search(final)
+    answer = answer_match.group(1).strip() if answer_match else None
+
+    return ModelReply(thinking=thinking, final=final, code_blocks=code_blocks, answer=answer)
 
 
 def save_code_blocks(code_blocks: list[tuple[str, str]], out_dir: Path, turn: int, label: str) -> list[Path]:
