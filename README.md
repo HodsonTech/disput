@@ -37,6 +37,13 @@ open question worth testing more, not a settled result.
 - Watch the dialogue live: each turn renders as it comes in, with any
   `<think>...</think>` / `reasoning_content` trace tucked into a collapsible
   panel so it doesn't clutter the read but is there if you want it.
+- A pinned **Current Answer** panel above the log: models often converge on
+  a real answer well before the turn limit, then spend several more turns
+  just agreeing with each other before the run actually ends. Both are
+  silently told to wrap their current best answer in `<answer>...</answer>`
+  whenever they have one - they can keep discussing after, and post an
+  updated one later if it's refined. The panel always shows the latest one,
+  so you don't have to read through the back-and-forth to find it.
 - Type into the moderator box at any time to inject a note into both models'
   history without stopping the conversation.
 - Any fenced code block either model writes is automatically saved to

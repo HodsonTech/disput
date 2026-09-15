@@ -91,13 +91,50 @@ testing is needed here, this isn't a settled result.
   and written to `transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -
   scratch space, not something the other model should treat as "said."
+- **Silent per-call system-prompt injection**: `take_turn()` appends two
+  notes to `cfg.system_prompt` for that call only (never touching the real
+  `cfg_a`/`cfg_b`, never shown in the transcript/log):
+  - a turn-budget note ("turn N of TOTAL, M remaining, pace yourself") so
+    neither model is guessing how much runway is left, recomputed fresh
+    every turn so it stays accurate across an extend;
+  - an answer-tag note asking each model to wrap its current best answer in
+    `<answer>...</answer>` once it has one (see below).
+- **Current Answer panel**: `client.py`'s `call_model()` extracts an
+  `<answer>...</answer>` block into `ModelReply.answer` without stripping it
+  out of `final` (stripping risked an empty history entry if a reply was
+  nothing but an answer block). `DialogueScreen` pins the latest one in a
+  dedicated `#answer-panel` above the log - exists because models routinely
+  converge on a real answer several turns before the limit, then spend the
+  rest just agreeing with each other; this surfaces it without needing to
+  read the whole back-and-forth. Same truncation-for-display-only pattern
+  as the topic banner (see Known open items / the topic-banner incident) -
+  the transcript always gets the full text.
 - **Round count is dynamic.** Set at setup (default 6); when reached, the
   dialogue pauses and the same moderator input box doubles as an "extend by
-  how many more?" prompt - type a number to extend, anything else to stop.
+  how many more?" prompt. A number extends; `stop`/`q`/`quit`/`no`/empty
+  settles into a finished-but-still-open state (a number can still be typed
+  later to extend after all); anything else is just logged as a normal
+  moderator note while still waiting for an actual decision. Nothing typed
+  here ever quits the app on its own - `ctrl+q` is the only thing that does,
+  precisely because a plain note used to trigger a silent full exit.
 - **Moderator injection**: the moderator input box is live throughout the
-  run (not a timed window like the old scripts) - type a note and press
-  Enter any time to inject it into both models' history as
-  `[Moderator note]: ...` without stopping the loop.
+  run - type a note and press Enter any time to inject it into both models'
+  history as `[Moderator note]: ...` without stopping the loop.
+- **Aborting a stuck turn**: `ctrl+g` closes the in-flight client's
+  connection pool (best-effort - the sync openai client offers no cleaner
+  cancellation lever) and rebuilds a fresh client for that side. `call_model`
+  also carries a generous (5 min default) request timeout, added after a
+  real incident: a slow remote call left `ctrl+q` unable to terminate the
+  process at all, since Python won't exit while a thread-pool worker is
+  still blocked on it. `ctrl+q` now also arms a daemon safety-net timer that
+  force-terminates ~2s after the normal exit, regardless.
+- **Recovering from a model error**: `escape` reopens the setup wizard
+  scoped to whichever side broke (`SourceSetupScreen`, same as initial
+  setup) and resumes the same turn once fixed - not a fresh dialogue.
+- **Starting a fresh topic**: `ctrl+n` prompts for a new topic/turn count
+  and pushes a brand-new `DialogueScreen` with the same `cfg_a`/`cfg_b` -
+  clean history, its own transcript/reasoning/code-output files - rather
+  than resetting the current screen in place or requiring a full restart.
 - **Code extraction**: any fenced code block in a reply is pulled out and
   saved to `dialogue_output/<session>/turn_NN_<label>_<i>.<ext>`, language
   guessed from the fence tag.
@@ -110,6 +147,37 @@ testing is needed here, this isn't a settled result.
 - Tool-call response parsing (see above) is unverified in practice.
 - The Textual thread-worker turn loop assumes a real terminal; no
   non-interactive/headless mode exists (nor is one needed for this use case).
+
+## Textual gotchas hit in this codebase (worth knowing before touching layout)
+
+- **`Vertical` and `TextArea` both default to `height: 1fr`** - fill a
+  fraction of the *viewport*, not size to content. Cost real debugging time
+  twice: the setup wizard's Continue button was permanently pushed off
+  Screen (TextArea eating all available space), and separately every
+  turn's `.turn` wrapper was competing for a shrinking slice of `#log` as
+  more turns got mounted - confirmed an early turn's region had literally
+  collapsed to `height=0` with 7 turns present. Both fixed with an explicit
+  `height: auto` / bounded `height:` override. Any new container or
+  TextArea added to a screen needs one of these checked, not assumed.
+- **Any non-scrollable Static fed user/model-controlled text needs a length
+  cap.** The topic banner and the Current Answer panel both sit above
+  `#log` and aren't scrollable themselves - a huge pasted topic once grew
+  the banner to 154 rows in a 24-row terminal, crushing the entire
+  conversation down to 2 visible rows. Both now truncate the *display*
+  (full text still goes to the model/transcript) plus carry a CSS
+  `max-height` + `overflow-y: hidden` backstop. Copy this pattern for any
+  future banner-like widget.
+- **`CollapsibleTitle` defaults to `width: auto`** - only as wide as its
+  label text, left-anchored, while the bar rendered on screen spans the
+  full container width. Clicking anywhere past the label silently did
+  nothing. Fixed globally via `Collapsible > CollapsibleTitle { width: 1fr; }`.
+- **Textual's command palette claims `ctrl+p` by default as a `priority=True`
+  binding**, which unconditionally beats any screen-level binding on the
+  same key - `ctrl+p` (Pause/Resume) silently never worked until
+  `ENABLE_COMMAND_PALETTE = False` was set on `DisputApp`. Any future
+  keybinding should be checked against `Input`/`TextArea`'s own claimed keys
+  too (e.g. `ctrl+x` is "cut" on `Input` - `ctrl+g` was used for abort
+  instead, specifically because it's unclaimed).
 
 ## Notable non-technical context
 
