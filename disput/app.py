@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import time
 from dataclasses import replace as replace_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -425,6 +426,7 @@ class DialogueScreen(Screen):
         self._error_side: str | None = None
         self._abort_requested = False
         self._current_client: OpenAI | None = None
+        self._turn_started_at: float | None = None
 
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -451,6 +453,7 @@ class DialogueScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one("#moderator-input", Input).focus()
+        self.set_interval(1.0, self._tick_thinking_status)
         self.take_turn()
 
     # -- turn loop ---------------------------------------------------------
@@ -467,7 +470,7 @@ class DialogueScreen(Screen):
         history = list(self.history_a if current == "A" else self.history_b)
 
         self._current_client = client
-        self.app.call_from_thread(self.set_status, f"Turn {turn_no}: {cfg.label} thinking… (ctrl+g to abort)")
+        self.app.call_from_thread(self._begin_turn_status, turn_no, cfg.label)
         try:
             # Neither model otherwise has any sense of how much runway is
             # left, which tends to produce aimless back-and-forth ("ping
@@ -493,6 +496,24 @@ class DialogueScreen(Screen):
                 self.app.call_from_thread(self.handle_turn_error, current, cfg, exc)
             return
         self.app.call_from_thread(self.handle_turn_result, turn_no, current, cfg, reply)
+
+    def _begin_turn_status(self, turn_no: int, label: str) -> None:
+        self._turn_started_at = time.monotonic()
+        self.set_status(f"Turn {turn_no}: {label} thinking… (ctrl+g to abort)")
+
+    def _tick_thinking_status(self) -> None:
+        # Runs every second regardless of state; only actually does
+        # anything while a call is genuinely in flight. The point is purely
+        # to prove the app is alive - a real model call can legitimately
+        # take minutes, and a status line that never changes is
+        # indistinguishable from one that's actually stuck.
+        if not self.turn_in_progress or self._turn_started_at is None:
+            return
+        elapsed = int(time.monotonic() - self._turn_started_at)
+        current = self.current
+        label = self.cfg_a.label if current == "A" else self.cfg_b.label
+        turn_no = self.turn + 1
+        self.set_status(f"Turn {turn_no}: {label} thinking… {elapsed}s (ctrl+g to abort)")
 
     def action_abort_turn(self) -> None:
         if not self.turn_in_progress:
