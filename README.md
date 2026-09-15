@@ -28,6 +28,13 @@ open question worth testing more, not a settled result.
 - Interactively pick (or add) a **source** - an OpenAI-compatible endpoint
   (base URL + API key) - for each side of the conversation. Saved sources are
   remembered for next time.
+- **Model A and Model B aren't interchangeable slots.** Turn order is fixed:
+  A always goes first each turn (it sees the bare topic with no other input
+  yet), B always goes second (reacting to A's prior turn). For a topic that
+  assigns asymmetric roles ("one of you propose, the other critique"), A
+  ends up the proposer and B the chaperone/critic by default - the setup
+  screen for each side says so up front (and as a hover tooltip on its
+  title), so you can pick which real model goes in which seat on purpose.
 - Each source's `/v1/models` is queried live and shown as a pickable list, so
   you always select from what's actually loaded right now rather than typing
   a model id from memory.

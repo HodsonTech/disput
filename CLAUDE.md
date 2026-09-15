@@ -87,6 +87,19 @@ testing is needed here, this isn't a settled result.
 - Each model keeps its OWN view of history (its own turns as `assistant`,
   the other model's turns as `user`) - not a single shared transcript
   object.
+- **Turn order is fixed and asymmetric, not cosmetic.** `self.current = "A"`
+  at init and `take_turn()` always starts there: Model A's first call sees
+  nothing but the bare topic (`history_a` seeded with just `{"role": "user",
+  "content": topic}`), Model B's first call already has A's opening reply
+  sitting in `history_b` as a `user` message. For any topic that assigns
+  asymmetric roles ("one of you propose, the other critique"), A becomes
+  the proposer and B the chaperone/critic by pure mechanical consequence of
+  going second - not because either model is told to play that role. Made
+  visible in `SourceSetupScreen._role_hint_text()` (shown once on the
+  source-picking step, plus as a `Static.tooltip` on the persistent title)
+  since it was previously invisible anywhere in the app and genuinely
+  surprised a user who assumed the topic's "one of you / the other" framing
+  was left entirely up to the models to sort out themselves.
 - **Reasoning traces** are shown in a collapsible panel per turn in the TUI
   and written to `transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -
