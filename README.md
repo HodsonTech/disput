@@ -23,6 +23,191 @@ disparity actually makes hallucination and drift easier to catch, versus
 just producing two models that disagree for unrelated reasons, is still an
 open question worth testing more, not a settled result.
 
+## Example: catching each other's mistakes
+
+Not two models agreeing with each other by default - one catching a real
+arithmetic error the other made, in the middle of auditing a budget
+allocation against a set of hard constraints (contingency exactly 8% of
+total, no other category over 35% of the remainder, everything summing to
+the exact total).
+
+MiniCPM proposed an allocation and, in its supporting math, computed the
+35%-of-remainder ceiling as $916.694. Gemma re-derived it independently and
+caught the error - the correct figure is $916.734, with several downstream
+percentage figures wrong as a result too. MiniCPM verified the correction
+against its own numbers, confirmed Gemma was right, and the dialogue moved
+on. The dollar amounts in the actual proposal never changed and the
+constraint was satisfied either way - what matters is that the check
+happened at all, unprompted, rather than one model taking the other's math
+on faith.
+
+<details>
+<summary>📋 Full reasoning traces - two models audit a budget allocation (4 turns, click to expand)</summary>
+
+```text
+============================================================
+[Turn 1] MiniCPM5-2B-heretic-abliterated thinking:
+------------------------------------------------------------
+Let me break down the constraints:
+
+1. Total budget: $2,847
+2. 6 categories: lodging, food, transport, activities, gear, contingency
+3. Contingency must be exactly 8% of the total
+4. No other category may exceed 35% of the remaining budget after contingency is set aside
+5. Categories must sum exactly to $2,847
+
+Let me compute:
+- Contingency = 8% of $2,847 = 0.08 × 2,847 = $227.76
+- Remaining budget = $2,847 - $227.76 = $2,619.24
+- 35% of remaining = 0.35 × $2,619.24 = $916.694
+- So each of the other 5 categories must be ≤ $916.694
+
+Let me check: 5 × $916.694 = $4,583.47, which is less than $2,619.24, so it's feasible.
+
+Now I need to propose an allocation and have the other model audit. But this is turn 1 of 10, so I should propose an allocation and then wait for the other model to audit. But wait - I'm the one proposing, and the other model will audit. Let me propose an allocation.
+
+Actually, let me think about this more carefully. The user wants me to propose an initial allocation, then have the other model audit. But I'm MiniCPM5-2B here, and the other model is "Model B." So I should propose my own allocation and then the other model will critique it.
+
+But actually, I can also just do the math myself and present it. Let me propose a reasonable allocation first, then note that the other model would audit.
+
+Let me think about what allocation to propose. I need to make sure:
+- Contingency = $227.76 (exactly 8%)
+- Remaining = $2,619.24
+- Each of the other 5 categories ≤ $916.694
+
+Let me propose an allocation that's reasonable:
+- Lodging: $500
+- Food: $500
+- Transport: $500
+- Activities: $500
+- Gear: $500
+- Contingency: $227.76
+
+Sum: 500+500+500+500+500+227.76 = $2,627.76. That's not $2,847. I need to make sure the sum is exact.
+
+Remaining after contingency = $2,619.24. I need to distribute this among 5 categories.
+
+Let me try:
+- Lodging: $500
+- Food: $500
+- Transport: $500
+- Activities: $500
+- Gear: $619.24
+
+Sum: 500+500+500+500+619.24 = $2,619.24. ✓
+Contingency: $227.76. Total: $2,619.24 + $227.76 = $2,847.00. ✓
+
+Each category check:
+- Contingency = 8% ✓
+- Other categories: max is $619.24, which is ≤ $916.694 ✓
+
+Let me present this. But I should also note that I'm the model proposing, and the other model will audit. Actually, the user says "have the other model audit the math." So I should propose, then the other model will critique. But since I'm only doing turn 1, I'll propose and then the other model will respond.
+
+Wait, but I can also just present the full solution if I'm confident. Let me do that, but present it as a proposal and invite audit.
+
+Actually, let me just propose and then the other model will audit. I'll make sure the math is correct.
+
+Let me verify: 0.08 × 2847 = 227.76.
+2847 - 227.76 = 2619.24.
+0.35 × 2619.24 = 916.694.
+
+Allocation:
+- Lodging: $500.00
+- Food: $500.00
+- Transport: $500.00
+- Activities: $500.00
+- Gear: $619.24
+- Contingency: $227.76
+Total: $2,847.00
+
+All constraints satisfied. Let me present this.
+
+Actually, I realize I should present this as a proposal and let the other model audit. But I can also do the audit myself and present the final answer. The user says "Iterate until every number is internally consistent." So I should make sure I present it correctly.
+
+Let me present the allocation with the math shown explicitly.
+
+============================================================
+[Turn 2] gemma-4-31B-it-heretic-i1 thinking:
+------------------------------------------------------------
+*   Total Budget: $2,847.00
+    *   Categories (6): Lodging, Food, Transport, Activities, Gear, Contingency.
+    *   Constraint 1: Contingency = exactly 8% of total.
+    *   Constraint 2: No other category > 35% of remaining budget (Total - Contingency).
+    *   Constraint 3: Sum must equal exactly $2,847.00.
+
+    *   Total: $2,847.00
+    *   Contingency: 8% of 2,847 = $227.76. (Correct: $2,847 * 0.08 = 227.76)
+    *   Remaining Budget: $2,847 - $227.76 = $2,619.24. (Correct)
+    *   Ceiling (35% of remaining): $2,619.24 * 0.35 = $916.734.
+        *   Wait, the previous model says $916.694. Let me re-calculate.
+        *   $2,619.24 * 0.35 = 916.734.
+        *   The previous model calculated $916.694. This is a small arithmetic error.
+
+    *   Lodging: $500.00
+    *   Food: $500.00
+    *   Transport: $500.00
+    *   Activities: $500.00
+    *   Gear: $619.24
+    *   Contingency: $227.76
+    *   Sum: $500*4 + $619.24 + $227.76 = $2,000 + $619.24 + $227.76 = $2,847.00. (Correct)
+
+    *   Lodging: $500 / $2,619.24 ≈ 19.09% (Previous model said 19.05%)
+    *   Food: $500 / $2,619.24 ≈ 19.09% (Previous model said 19.05%)
+    *   Transport: $500 / $2,619.24 ≈ 19.09% (Previous model said 19.05%)
+    *   Activities: $500 / $2,619.24 ≈ 19.09% (Previous model said 19.05%)
+    *   Gear: $619.24 / $2,619.24 ≈ 23.64% (Previous model said 23.74%)
+    *   All are below 35% (even with the previous model's incorrect ceiling).
+
+    *   Ceiling calculation: $2,619.24 * 0.35 = $916.734. The previous model said $916.694.
+    *   Percentage of remaining calculations:
+        *   $500 / $2,619.24 = 0.19093... (19.09%), not 19.05%.
+        *   $619.24 / $2,619.24 = 0.23638... (23.64%), not 23.74%.
+
+    *   Acknowledge the overall structure is correct.
+    *   Point out the arithmetic errors in the ceiling calculation and the percentage of remaining budget column.
+    *   Confirm that despite these errors, the final amounts *do* satisfy the constraints.
+    *   Provide the corrected math for the audit.
+
+============================================================
+[Turn 3] MiniCPM5-2B-heretic-abliterated thinking:
+------------------------------------------------------------
+Now let me check each claim:
+
+1. Ceiling: $2,619.24 × 0.35 = $916.734. The other model said $916.734, which is correct. My original said $916.694, which was wrong.
+
+2. 500/2619.24 = 19.0895%, which rounds to 19.09%. The other model said 19.09%. My original said 19.05%, which was wrong.
+
+3. 619.24/2619.24 = 23.6419%, which rounds to 23.64%. The other model said 23.64%. My original said 23.74%, which was wrong.
+
+So the other model is correct on all three. My original had arithmetic errors in the supporting calculations. The dollar amounts themselves were correct, but the percentages in the constraint check column were wrong.
+
+The allocation is valid. I should acknowledge the errors and confirm the final allocation is correct.
+
+============================================================
+[Turn 4] gemma-4-31B-it-heretic-i1 thinking:
+------------------------------------------------------------
+The user (the other model) has acknowledged the corrections and provided a final table that aligns with my previous response.
+
+    *   Total Budget: $2,847.00
+    *   Contingency: $2,847 * 0.08 = $227.76 (Correct)
+    *   Remaining: $2,847 - $227.76 = $2,619.24 (Correct)
+    *   Ceiling: $2,619.24 * 0.35 = $916.734 (Correct)
+    *   Lodging: $500.00 (19.09% of remaining) - Under ceiling (Correct)
+    *   Food: $500.00 (19.09% of remaining) - Under ceiling (Correct)
+    *   Transport: $500.00 (19.09% of remaining) - Under ceiling (Correct)
+    *   Activities: $500.00 (19.09% of remaining) - Under ceiling (Correct)
+    *   Gear: $619.24 (23.64% of remaining) - Under ceiling (Correct)
+    *   Sum check: $500 * 4 + $619.24 + $227.76 = $2,000 + $619.24 + $227.76 = $2,847.00 (Correct)
+
+The process is complete. Both models agree on the numbers and the constraints.
+
+The user ended with "All constraints satisfied; allocation is final." This implies the discussion has reached a concrete conclusion.
+
+I should simply confirm the finality and end the dialogue as per the instructions.
+```
+
+</details>
+
 ## What it does
 
 - Interactively pick (or add) a **source** - an OpenAI-compatible endpoint
