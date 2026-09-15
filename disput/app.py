@@ -576,7 +576,8 @@ class DialogueScreen(Screen):
         if self.turn >= self.total_rounds:
             self.awaiting_extend = True
             self.set_status(
-                f"Reached {self.total_rounds} turns. Type a number below to extend, or anything else to stop."
+                f"Reached {self.total_rounds} turns. Type a number to extend, or 'stop' to finish "
+                f"(ctrl+q quits and saves; a plain note here is just logged, not treated as 'stop')."
             )
             return
 
@@ -585,6 +586,8 @@ class DialogueScreen(Screen):
             self.set_timer(0.5, self.take_turn)
 
     # -- moderator / extend input -------------------------------------------
+
+    STOP_WORDS = {"stop", "no", "n", "q", "quit", "done", "end"}
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "moderator-input":
@@ -599,17 +602,35 @@ class DialogueScreen(Screen):
                 self.mount_note(f"Extending — now running to turn {self.total_rounds}.")
                 self.set_status("")
                 self.take_turn()
+            elif not value or value.lower() in self.STOP_WORDS:
+                # Stays open (never silently quits the whole app from a text
+                # box) - just settles into a finished-but-still-inspectable
+                # state. A number can still be typed later to extend after
+                # all; ctrl+q is the only thing that actually exits.
+                self.mount_note(f"[yellow]Stopped at {self.total_rounds} turns.[/yellow]")
+                self.set_status(
+                    f"Stopped at {self.total_rounds} turns. Type a number to extend, or ctrl+q to quit and save."
+                )
             else:
-                self.action_quit_app()
+                # Not a number and not a recognized "stop" word - treat it as
+                # a genuine moderator note rather than guessing, and keep
+                # waiting for an actual extend/stop decision.
+                self._inject_moderator_note(value)
+                self.set_status(
+                    f"Reached {self.total_rounds} turns. Type a number to extend, or 'stop' to finish."
+                )
             return
 
         if value:
-            injected = f"[Moderator note]: {value}"
-            self.history_a.append({"role": "user", "content": injected})
-            self.history_b.append({"role": "user", "content": injected})
-            self.mount_note(f"🗣  Moderator: {value}")
-            self.transcript_lines.append(f"### Moderator (after turn {self.turn})\n\n{value}\n")
-            self._write_transcript()
+            self._inject_moderator_note(value)
+
+    def _inject_moderator_note(self, value: str) -> None:
+        injected = f"[Moderator note]: {value}"
+        self.history_a.append({"role": "user", "content": injected})
+        self.history_b.append({"role": "user", "content": injected})
+        self.mount_note(f"🗣  Moderator: {value}")
+        self.transcript_lines.append(f"### Moderator (after turn {self.turn})\n\n{value}\n")
+        self._write_transcript()
 
     # -- actions -------------------------------------------------------------
 
