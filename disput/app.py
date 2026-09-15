@@ -49,8 +49,12 @@ DEFAULT_SYSTEM_TEMPLATE = (
     "or was here first. Keep responses focused and under 200 words unless you're writing code."
 )
 
-OUTPUT_DIR = Path("dialogue_output")
-TRANSCRIPTS_DIR = Path("transcripts")
+# Fixed, not CWD-relative: a pipx/pip install -e . install puts `disput` on
+# PATH globally, so it's runnable from any directory - a relative path here
+# meant output scattered wherever the user happened to be standing when
+# they launched it, with no predictable place to find it afterward.
+TRANSCRIPTS_DIR = Path.home() / "Transcripts"
+OUTPUT_DIR = TRANSCRIPTS_DIR / "dialogue_output"
 DEFAULT_ROUNDS = 6
 
 
