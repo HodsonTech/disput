@@ -5,6 +5,7 @@ a live dialogue screen."""
 from __future__ import annotations
 
 import re
+from dataclasses import replace as replace_dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -465,7 +466,22 @@ class DialogueScreen(Screen):
         self._current_client = client
         self.app.call_from_thread(self.set_status, f"Turn {turn_no}: {cfg.label} thinking… (ctrl+g to abort)")
         try:
-            reply = call_model(client, cfg, history)
+            # Neither model otherwise has any sense of how much runway is
+            # left, which tends to produce aimless back-and-forth ("ping
+            # pong") instead of working toward a conclusion - silently
+            # folded into the system prompt for this call only (never shown
+            # in the transcript/log, and doesn't touch the real cfg_a/cfg_b
+            # or conversation history) so it stays accurate even if the
+            # dialogue gets extended later.
+            turns_remaining = self.total_rounds - turn_no + 1
+            budget_note = (
+                f"\n\n[Dialogue budget: this is turn {turn_no} of {self.total_rounds} total turns "
+                f"({turns_remaining} remaining, including this one). Pace yourself - if turns are "
+                f"running low, work toward a concrete conclusion instead of continuing to go back "
+                f"and forth.]"
+            )
+            call_cfg = replace_dataclass(cfg, system_prompt=cfg.system_prompt + budget_note)
+            reply = call_model(client, call_cfg, history)
         except Exception as exc:  # noqa: BLE001 - network/backend error, surface and pause rather than crash
             if self._abort_requested:
                 self._abort_requested = False
