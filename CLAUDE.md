@@ -57,15 +57,17 @@ testing is needed here, this isn't a settled result.
   per side), `TopicScreen`, `DialogueScreen` (the live turn loop).
 - `pyproject.toml` - `pip install -e .` gives a `disput` console script.
 - `presets.example.json` - documentation only, never read at runtime.
-- `dialogue_output/` and `transcripts/` - generated at runtime, gitignored.
-  Both are `Path("dialogue_output")`/`Path("transcripts")` in `app.py` -
-  **relative to CWD at launch, not a fixed location.** Harmless when run via
-  `python3 main.py` from inside the repo (the assumed original workflow),
-  but a `pipx`/`pip install -e .` install puts `disput` on PATH globally,
-  so it's now genuinely runnable from anywhere - output lands wherever the
-  user happened to be standing, not somewhere predictable. Flagged, not yet
-  fixed: candidate fix is anchoring both under `~/.disput/` alongside
-  `presets.json`, same reasoning that already applies there.
+- `TRANSCRIPTS_DIR` / `OUTPUT_DIR` in `app.py` - fixed at `Path.home() /
+  "Transcripts"` and `.../Transcripts/dialogue_output`, NOT CWD-relative.
+  Used to be `Path("transcripts")`/`Path("dialogue_output")` - harmless
+  when always run via `python3 main.py` from inside the repo, but a
+  `pipx`/`pip install -e .` install puts `disput` on PATH globally, so
+  it's genuinely runnable from anywhere - output was landing wherever the
+  user happened to be standing, not somewhere predictable. Since both
+  constants are evaluated at **import time**, every test that runs a real
+  dialogue turn writes through them - all 25 test scripts redirect `HOME`
+  to a fresh temp dir before importing `disput.app`, rather than patching
+  each test's `TRANSCRIPTS_DIR`/`OUTPUT_DIR` individually.
 - Legacy artifacts from the old two-script version
   (`dialogue_transcript_gemma.md`, `reasoning_feed_gemma.log`) are still on
   disk but gitignored - kept as prior session data, not part of the tool.
@@ -110,7 +112,7 @@ testing is needed here, this isn't a settled result.
   surprised a user who assumed the topic's "one of you / the other" framing
   was left entirely up to the models to sort out themselves.
 - **Reasoning traces** are shown in a collapsible panel per turn in the TUI
-  and written to `transcripts/disput_<session>_reasoning.log`, but are
+  and written to `~/Transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -
   scratch space, not something the other model should treat as "said."
 - **Silent per-call system-prompt injection**: `take_turn()` appends three
@@ -196,7 +198,7 @@ testing is needed here, this isn't a settled result.
   the per-turn extraction in `handle_turn_result`). Replaced with
   `client.save_final_answer_code()`, called only from the save-choice flow
   below (`full`/`result` modes) - extracts code from `self._latest_answer`
-  specifically, saved as `dialogue_output/<session>/answer_N.<ext>`. The
+  specifically, saved as `~/Transcripts/dialogue_output/<session>/answer_N.<ext>`. The
   final answer is the one thing actually worth having as a standalone file.
 - **Save-choice flow**: typing `stop` at the `awaiting_extend` prompt no
   longer just idles - it sets `self._awaiting_save_choice = True` and shows
@@ -220,7 +222,7 @@ testing is needed here, this isn't a settled result.
     from `_finalize_and_quit()` - it unconditionally re-extracts final-
     answer code, which would silently undo `none`'s deletion.
 - Transcript is written continuously (not just at the end) to
-  `transcripts/disput_<session>.md`, each turn's reasoning wrapped in a
+  `~/Transcripts/disput_<session>.md`, each turn's reasoning wrapped in a
   collapsible `<details><summary>🧠 Thinking</summary>` block. Session IDs
   use microsecond precision (`%Y%m%d_%H%M%S_%f`) - second precision let two
   `DialogueScreen`s created within the same second (e.g. `ctrl+n` right

@@ -260,11 +260,12 @@ I should simply confirm the finality and end the dialogue as per the instruction
 - Type into the moderator box at any time to inject a note into both models'
   history without stopping the conversation.
 - A full Markdown transcript and a raw reasoning log are written to
-  `transcripts/` continuously as the conversation runs.
+  `~/Transcripts/` continuously as the conversation runs.
 - **When you stop the run** (typing `stop` at the extend-or-stop prompt),
   you're asked how to save it:
   - `full` (default) - keep the transcript + reasoning log, plus extract any
-    code specifically from the final answer to `dialogue_output/<session>/`.
+    code specifically from the final answer to
+    `~/Transcripts/dialogue_output/<session>/`.
   - `result` - discard the verbose transcript, write one distilled
     `..._result.md` instead (topic + final answer only).
   - `none` - delete every file this run produced.
@@ -385,14 +386,11 @@ only `ctrl+q` does that unconditionally.
   trace, extracting code from the final answer.
 - `disput/app.py` - the Textual TUI: the setup wizard and the live
   dialogue screen.
-- `dialogue_output/` and `transcripts/` are generated at runtime,
-  **relative to whatever directory you were in when you ran `disput`**,
-  not a fixed location. This matters more than it sounds: a
-  `pipx`/`pip install -e .` install puts `disput` on your PATH globally, so
-  it's runnable from anywhere - run it from your home directory instead of
-  the repo folder and that's where these two folders show up. If you can't
-  find a transcript, check where you actually launched it from, e.g.
-  `find ~ -maxdepth 4 -name transcripts -type d`.
+- Transcripts, reasoning logs, and any code extracted from a final answer
+  are all written under `~/Transcripts/` - a fixed location regardless of
+  which directory you ran `disput` from (it's installed via `pipx`/`pip
+  install -e .` onto your PATH, so it's runnable from anywhere).
+  `dialogue_output/` lives nested inside it (`~/Transcripts/dialogue_output/`).
 
 ## Backend notes
 
