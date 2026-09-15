@@ -47,16 +47,69 @@ open question worth testing more, not a settled result.
 
 ## Setup
 
+Requires Python 3.10+.
+
+### macOS
+
 ```bash
+git clone https://github.com/HodsonTech/disput.git
+cd disput
 python3 -m pip install -e .
+disput
 ```
 
-(or just `python3 -m pip install openai textual` and run without installing.)
+That's it - macOS's Python (from python.org, Homebrew, or MacPorts) installs
+packages directly with no extra steps.
+
+### Debian / Ubuntu (and derivatives, e.g. in a VM)
+
+Newer Debian/Ubuntu refuse a plain `pip install` outside a virtual
+environment (`error: externally-managed-environment`) - this is a guard rail
+on their *system* Python specifically, not a Disput requirement, and not
+something you'll hit on macOS. The cleanest way around it is
+[`pipx`](https://pipx.pypa.io), which creates that isolated environment for
+you automatically but still puts the `disput` command on your normal PATH,
+so it survives reboots and new terminals with nothing more to remember:
+
+```bash
+sudo apt update && sudo apt install pipx git
+git clone https://github.com/HodsonTech/disput.git
+cd disput
+pipx install -e .
+disput
+```
+
+If you'd rather not install `pipx`, a plain venv works too, but you have to
+manually reactivate it in every new shell (including after a reboot) before
+`disput` will be found:
+
+```bash
+sudo apt install python3-venv git   # if this fails, apt will tell you the
+                                    # exact versioned package name to use,
+                                    # e.g. python3.13-venv - use that instead
+git clone https://github.com/HodsonTech/disput.git
+cd disput
+python3 -m venv .venv
+source .venv/bin/activate   # <- repeat this line in every new terminal
+python3 -m pip install -e .
+disput
+```
+
+Do **not** use `pip install --break-system-packages` to skip this - it
+works, but risks silently conflicting with apt-managed packages later for
+no real benefit over `pipx`.
+
+### No install at all
+
+```bash
+python3 -m pip install openai textual   # or pipx equivalent on Debian/Ubuntu
+python3 main.py
+```
 
 ## Run
 
 ```bash
-disput          # if installed via -e .
+disput          # if installed via -e . / pipx
 # or
 python3 main.py     # no install needed
 ```
@@ -64,10 +117,17 @@ python3 main.py     # no install needed
 You'll be walked through: source + model for Model A -> source + model for
 Model B -> topic + turn count -> live dialogue.
 
-**Keys during the dialogue:** `ctrl+p` pause/resume, `ctrl+q` quit and save.
-Type in the moderator box + Enter to inject a note; when the turn limit is
-hit, type a number there to extend by that many turns, or anything else to
-stop.
+**Keys during the dialogue:**
+- `ctrl+p` - pause/resume
+- `ctrl+g` - abort the current in-flight turn (e.g. it's hanging/stalled)
+- `ctrl+n` - start a fresh topic with the same two models, no re-setup
+- `esc` - after an error, reopen setup for whichever model broke
+- `ctrl+q` - quit and save
+
+Type in the moderator box + Enter any time to inject a note without
+stopping the conversation. When the turn limit is hit, type a number there
+to extend by that many turns, or `stop` (or just Enter) to wrap up without
+quitting the app.
 
 ## Where things live
 
