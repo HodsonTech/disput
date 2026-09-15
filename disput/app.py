@@ -355,7 +355,8 @@ class TopicScreen(Screen):
         yield Static(" Topic & length ", id="step-title")
         yield VerticalScroll(
             Static("Starting topic/prompt for the dialogue:"),
-            TextArea(DEFAULT_TOPIC, id="topic-area"),
+            Static(f"[dim]e.g. {DEFAULT_TOPIC}[/dim]"),
+            TextArea("", id="topic-area"),
             Static("How many turns total?"),
             Input(value=str(DEFAULT_ROUNDS), id="rounds-input"),
             Button("Start Dialogue", id="start-btn", variant="primary"),
@@ -376,7 +377,12 @@ class TopicScreen(Screen):
             self.start_dialogue()
 
     def start_dialogue(self) -> None:
-        topic = self.query_one("#topic-area", TextArea).text.strip() or DEFAULT_TOPIC
+        topic_area = self.query_one("#topic-area", TextArea)
+        topic = topic_area.text.strip()
+        if not topic:
+            topic_area.focus()
+            self.notify("Type a starting topic before continuing.", severity="warning")
+            return
         rounds_raw = self.query_one("#rounds-input", Input).value.strip()
         rounds = int(rounds_raw) if rounds_raw.isdigit() and int(rounds_raw) > 0 else DEFAULT_ROUNDS
         self.dismiss((topic, rounds))
