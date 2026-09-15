@@ -427,6 +427,11 @@ class DialogueScreen(Screen):
         self._abort_requested = False
         self._latest_answer: str | None = None
         self._latest_answer_meta: tuple[int, str] | None = None  # (turn_no, label)
+        # Both sides must independently signal [DONE] before it's treated as
+        # real agreement to stop early - reset for whichever side speaks
+        # without the signal, so it always reflects each side's MOST RECENT
+        # turn, not some stale agreement from many turns ago.
+        self._converged = {"A": False, "B": False}
         self._current_client: OpenAI | None = None
         self._turn_started_at: float | None = None
 
@@ -499,7 +504,20 @@ class DialogueScreen(Screen):
                 "afterward, and post a new <answer> block later if you refine it. Don't repeat an "
                 "unchanged answer block turn after turn once nothing new has been added.]"
             )
-            call_cfg = replace_dataclass(cfg, system_prompt=cfg.system_prompt + budget_note + answer_note)
+            # A third silent note: once BOTH of you have nothing left to
+            # add, keep saying so forever is exactly the "ping pong
+            # self-congratulation" this exists to cut short. Only acted on
+            # if both sides signal it (see handle_turn_result) - one model
+            # alone declaring victory isn't enough to actually stop early.
+            done_note = (
+                "\n\n[If you genuinely have nothing more to add - the discussion has reached a "
+                "real conclusion, not just agreement for its own sake - end your reply with the "
+                "exact token [DONE] on its own line. Only do this if there's truly nothing left; "
+                "if the other model raises something new, engage with it instead.]"
+            )
+            call_cfg = replace_dataclass(
+                cfg, system_prompt=cfg.system_prompt + budget_note + answer_note + done_note
+            )
             reply = call_model(client, call_cfg, history)
         except Exception as exc:  # noqa: BLE001 - network/backend error, surface and pause rather than crash
             if self._abort_requested:
@@ -617,12 +635,25 @@ class DialogueScreen(Screen):
 
         self.current = other
         self.turn_in_progress = False
+        self._converged[current] = reply.done
 
         if self.turn >= self.total_rounds:
             self.awaiting_extend = True
             self.set_status(
                 f"Reached {self.total_rounds} turns. Type a number to extend, or 'stop' to finish "
                 f"(ctrl+q quits and saves; a plain note here is just logged, not treated as 'stop')."
+            )
+            return
+
+        if self._converged["A"] and self._converged["B"]:
+            self._converged["A"] = False
+            self._converged["B"] = False
+            self.awaiting_extend = True
+            self.mount_note("[green]Both models signaled they have nothing more to add.[/green]")
+            self.set_status(
+                f"Both models signaled agreement at turn {self.turn} (of your planned "
+                f"{self.total_rounds}). Type a number to add more turns, 'stop' to finish now, or "
+                f"anything else to leave a note and keep going."
             )
             return
 

@@ -23,6 +23,12 @@ THINK_PATTERN = re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE)
 # through several turns of back-and-forth.
 ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL | re.IGNORECASE)
 
+# A model's own signal that it has nothing more to add (see app.py's
+# per-call system-prompt note). Unlike <answer>, this is pure metadata -
+# safe to strip out of `final` entirely rather than just extracted, since
+# it's never the substantive content of a reply.
+DONE_PATTERN = re.compile(r"\[DONE\]", re.IGNORECASE)
+
 # ```lang\n...code...\n``` fenced blocks, used both for display and for
 # extraction to disk.
 CODE_FENCE_PATTERN = re.compile(r"```([a-zA-Z0-9_+\-]*)\n(.*?)```", re.DOTALL)
@@ -88,6 +94,7 @@ class ModelReply:
     final: str
     code_blocks: list[tuple[str, str]]  # (language, code)
     answer: str | None = None
+    done: bool = False
 
 
 # Generous on purpose - local/CPU inference and heavy "thinking" models can
@@ -156,7 +163,11 @@ def call_model(
     answer_match = ANSWER_PATTERN.search(final)
     answer = answer_match.group(1).strip() if answer_match else None
 
-    return ModelReply(thinking=thinking, final=final, code_blocks=code_blocks, answer=answer)
+    done = bool(DONE_PATTERN.search(final))
+    if done:
+        final = DONE_PATTERN.sub("", final).strip()
+
+    return ModelReply(thinking=thinking, final=final, code_blocks=code_blocks, answer=answer, done=done)
 
 
 def save_code_blocks(code_blocks: list[tuple[str, str]], out_dir: Path, turn: int, label: str) -> list[Path]:
