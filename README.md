@@ -41,6 +41,19 @@ constraint was satisfied either way - what matters is that the check
 happened at all, unprompted, rather than one model taking the other's math
 on faith.
 
+**The topic given to both models:**
+
+> You are building a shared trip budget together. Total budget: $2,847. You
+> must allocate it across exactly 6 categories (lodging, food, transport,
+> activities, gear, contingency), where contingency must be exactly 8% of
+> the total and no other category may exceed 35% of the remaining budget
+> after contingency is set aside. Propose an initial allocation, then have
+> the other model audit the math and flag any category that violates a
+> constraint or any arithmetic error. Iterate until every number is
+> internally consistent and the categories sum exactly to $2,847. State
+> your final allocation as a table with the math shown explicitly, not
+> just final numbers.
+
 **Full reasoning traces - two models audit a budget allocation (4 turns):**
 
 ```text
