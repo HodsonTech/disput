@@ -48,3 +48,9 @@ def upsert_source(source: Source, old_name: str | None = None) -> None:
     sources = [s for s in sources if s.name not in names_to_drop]
     sources.append(source)
     save_sources(sources)
+
+
+def delete_source(name: str) -> None:
+    """Remove a saved source by name. No-op if it's already gone."""
+    sources = [s for s in load_sources() if s.name != name]
+    save_sources(sources)

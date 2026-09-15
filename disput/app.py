@@ -66,6 +66,7 @@ class SourceSetupScreen(Screen):
     BINDINGS = [
         ("escape", "go_back", "Back"),
         ("e", "edit_highlighted_source", "Edit source"),
+        ("d", "delete_highlighted_source", "Delete source"),
         ("ctrl+s", "submit_details", "Continue"),
     ]
 
@@ -77,6 +78,7 @@ class SourceSetupScreen(Screen):
         self.chosen_model: str | None = None
         self._sources: list[cfgstore.Source] = []
         self._editing_source: cfgstore.Source | None = None
+        self._delete_candidate: cfgstore.Source | None = None
         self._last_models: list[str] = []
         # Tracks which internal wizard step is showing, so `escape` can step
         # back through them instead of popping the whole screen - popping
@@ -111,7 +113,7 @@ class SourceSetupScreen(Screen):
         self.set_body(
             Static("Pick a saved source, or add a new one:"),
             OptionList(*options, id="source-list"),
-            Static("[dim]Enter: use it   •   e: edit the highlighted source[/dim]"),
+            Static("[dim]Enter: use it   •   e: edit   •   d: delete the highlighted source[/dim]"),
         )
         self.query_one("#source-list", OptionList).focus()
 
@@ -123,7 +125,7 @@ class SourceSetupScreen(Screen):
         base screen instead of anything navigable."""
         if self._step == "source":
             return  # nothing earlier to go back to within this screen
-        if self._step in ("custom_source", "fetch_error", "model", "manual_model"):
+        if self._step in ("custom_source", "fetch_error", "model", "manual_model", "confirm_delete"):
             self.show_source_step()
         elif self._step == "details":
             if self._last_models:
@@ -140,6 +142,28 @@ class SourceSetupScreen(Screen):
         if idx is None or idx >= len(self._sources):
             return
         self.show_custom_source_step(editing=self._sources[idx])
+
+    def action_delete_highlighted_source(self) -> None:
+        try:
+            option_list = self.query_one("#source-list", OptionList)
+        except Exception:
+            return
+        idx = option_list.highlighted
+        if idx is None or idx >= len(self._sources):
+            return
+        self.show_confirm_delete_step(self._sources[idx])
+
+    def show_confirm_delete_step(self, source: cfgstore.Source) -> None:
+        self._step = "confirm_delete"
+        self._delete_candidate = source
+        self.set_body(
+            Static(f"Delete saved source '{source.name}' ({source.base_url})?"),
+            Static("[dim]This only removes it from Disput's saved list - nothing happens to the server itself.[/dim]"),
+            Horizontal(
+                Button("Delete", id="confirm-delete-btn", variant="error"),
+                Button("Cancel", id="cancel-delete-btn"),
+            ),
+        )
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         list_id = event.option_list.id
@@ -191,6 +215,14 @@ class SourceSetupScreen(Screen):
             self.confirm_manual_model()
         elif event.button.id == "details-continue-btn":
             self.finish_details()
+        elif event.button.id == "confirm-delete-btn":
+            if self._delete_candidate:
+                cfgstore.delete_source(self._delete_candidate.name)
+                self._delete_candidate = None
+            self.show_source_step()
+        elif event.button.id == "cancel-delete-btn":
+            self._delete_candidate = None
+            self.show_source_step()
 
     def save_custom_source(self) -> None:
         name = self.query_one("#src-name", Input).value.strip()
