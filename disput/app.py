@@ -398,6 +398,7 @@ class DialogueScreen(Screen):
         ("ctrl+p", "toggle_pause", "Pause/Resume"),
         ("ctrl+q", "quit_app", "Quit & Save"),
         ("ctrl+g", "abort_turn", "Abort turn"),
+        ("ctrl+n", "new_topic", "New topic (same models)"),
         ("escape", "fix_broken_model", "Fix model (after an error)"),
     ]
 
@@ -646,6 +647,21 @@ class DialogueScreen(Screen):
     def action_quit_app(self) -> None:
         self._write_transcript()
         self.app.exit()
+
+    def action_new_topic(self) -> None:
+        if self.turn_in_progress:
+            return  # abort the in-flight turn first (ctrl+g), then retry
+        self.app.push_screen(TopicScreen(), callback=self._start_new_topic)
+
+    def _start_new_topic(self, result: tuple[str, int]) -> None:
+        topic, rounds = result
+        # Same models/sources (cfg_a/cfg_b carried over as-is), but
+        # everything else - history, turn count, transcript/reasoning/code
+        # output files - starts completely fresh via a brand new screen
+        # rather than trying to reset this one in place.
+        new_screen = DialogueScreen(self.cfg_a, self.cfg_b, topic, rounds)
+        self.app.pop_screen()
+        self.app.push_screen(new_screen)
 
     # -- UI helpers ------------------------------------------------------------
 
