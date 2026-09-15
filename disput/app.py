@@ -133,27 +133,32 @@ class SourceSetupScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save-source-btn":
-            name = self.query_one("#src-name", Input).value.strip()
-            url = self.query_one("#src-url", Input).value.strip()
-            key = self.query_one("#src-key", Input).value.strip()
-            tools_raw = self.query_one("#src-tools", Input).value.strip()
-            tools = [t.strip() for t in tools_raw.split(",") if t.strip()]
-            if not name or not url:
-                self.set_body(Static("[red]Name and base URL are both required.[/red]"))
-                self.set_timer(1.5, self.show_custom_source_step)
-                return
-            source = cfgstore.Source(name=name, base_url=url, api_key=key, enabled_tools=tools)
-            cfgstore.upsert_source(source)
-            self.chosen_source = source
-            self.fetch_models()
+            self.save_custom_source()
         elif event.button.id == "manual-model-btn":
             self.show_manual_model_step()
         elif event.button.id == "retry-fetch-btn":
             self.fetch_models()
         elif event.button.id == "back-to-source-btn":
             self.show_source_step()
+        elif event.button.id == "manual-model-continue-btn":
+            self.confirm_manual_model()
         elif event.button.id == "details-continue-btn":
             self.finish_details()
+
+    def save_custom_source(self) -> None:
+        name = self.query_one("#src-name", Input).value.strip()
+        url = self.query_one("#src-url", Input).value.strip()
+        key = self.query_one("#src-key", Input).value.strip()
+        tools_raw = self.query_one("#src-tools", Input).value.strip()
+        tools = [t.strip() for t in tools_raw.split(",") if t.strip()]
+        if not name or not url:
+            self.set_body(Static("[red]Name and base URL are both required.[/red]"))
+            self.set_timer(1.5, self.show_custom_source_step)
+            return
+        source = cfgstore.Source(name=name, base_url=url, api_key=key, enabled_tools=tools)
+        cfgstore.upsert_source(source)
+        self.chosen_source = source
+        self.fetch_models()
 
     # -- step 2: fetch models from the chosen source ----------------------
 
@@ -205,10 +210,18 @@ class SourceSetupScreen(Screen):
         self.query_one("#manual-model-input", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "manual-model-input":
-            self.chosen_model = event.value.strip()
-            if self.chosen_model:
-                self.show_details_step()
+        if event.input.id in ("src-name", "src-url", "src-key", "src-tools"):
+            self.save_custom_source()
+        elif event.input.id == "manual-model-input":
+            self.confirm_manual_model()
+        elif event.input.id == "label-input":
+            self.finish_details()
+
+    def confirm_manual_model(self) -> None:
+        value = self.query_one("#manual-model-input", Input).value.strip()
+        if value:
+            self.chosen_model = value
+            self.show_details_step()
 
     # -- step 3: label + system prompt ------------------------------------
 
@@ -255,8 +268,14 @@ class TopicScreen(Screen):
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id != "start-btn":
-            return
+        if event.button.id == "start-btn":
+            self.start_dialogue()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "rounds-input":
+            self.start_dialogue()
+
+    def start_dialogue(self) -> None:
         topic = self.query_one("#topic-area", TextArea).text.strip() or DEFAULT_TOPIC
         rounds_raw = self.query_one("#rounds-input", Input).value.strip()
         rounds = int(rounds_raw) if rounds_raw.isdigit() and int(rounds_raw) > 0 else DEFAULT_ROUNDS
