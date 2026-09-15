@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import threading
 import time
 from dataclasses import replace as replace_dataclass
@@ -32,7 +33,7 @@ from textual.widgets import (
 from textual.widgets.option_list import Option
 
 from . import config as cfgstore
-from .client import ModelConfig, ModelReply, call_model, list_models, make_client, save_code_blocks
+from .client import ModelConfig, ModelReply, call_model, list_models, make_client, save_final_answer_code
 
 DEFAULT_TOPIC = (
     "Collaborate and design a simple terminal application that shows a more "
@@ -459,10 +460,16 @@ class DialogueScreen(Screen):
         self._usage_tokens = {"A": 0, "B": 0}  # cumulative total_tokens per side
         self._answer_expanded = False
         self._final_answer_mounted_for: int | None = None  # turn_no already appended to the log
+        self._awaiting_save_choice = False
         self._current_client: OpenAI | None = None
         self._turn_started_at: float | None = None
 
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Microsecond precision, not just seconds: two DialogueScreens can
+        # genuinely be constructed within the same second (e.g. ctrl+n
+        # starting a new topic right after the previous one), and a
+        # collision here means the new session silently overwrites the
+        # old one's transcript file rather than getting its own.
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
         self.transcript_path = TRANSCRIPTS_DIR / f"disput_{session_id}.md"
         self.reasoning_path = TRANSCRIPTS_DIR / f"disput_{session_id}_reasoning.log"
@@ -668,10 +675,6 @@ class DialogueScreen(Screen):
 
         self.mount_turn_widget(turn_no, current, cfg, reply)
 
-        if reply.code_blocks:
-            paths = save_code_blocks(reply.code_blocks, self.code_dir, turn_no, cfg.label)
-            self.mount_note(f"💾 saved {len(paths)} code file(s): " + ", ".join(p.name for p in paths))
-
         self.history_a.append({"role": "assistant" if current == "A" else "user", "content": reply.final})
         self.history_b.append({"role": "assistant" if current == "B" else "user", "content": reply.final})
 
@@ -721,12 +724,21 @@ class DialogueScreen(Screen):
     # -- moderator / extend input -------------------------------------------
 
     STOP_WORDS = {"stop", "no", "n", "q", "quit", "done", "end"}
+    SAVE_CHOICE_PROMPT = (
+        "How should this be saved? 'full' (transcript + reasoning log - default), "
+        "'result' (just the topic + final answer), or 'none' (discard everything from this "
+        "run) - or 'cancel' to keep going instead."
+    )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "moderator-input":
             return
         value = event.value.strip()
         event.input.value = ""
+
+        if self._awaiting_save_choice:
+            self._handle_save_choice(value)
+            return
 
         if self.awaiting_extend:
             if value.isdigit() and int(value) > 0:
@@ -736,14 +748,15 @@ class DialogueScreen(Screen):
                 self.set_status("")
                 self.take_turn()
             elif not value or value.lower() in self.STOP_WORDS:
-                # Stays open (never silently quits the whole app from a text
-                # box) - just settles into a finished-but-still-inspectable
-                # state. A number can still be typed later to extend after
-                # all; ctrl+q is the only thing that actually exits.
+                # Doesn't quit outright from this text box - moves into an
+                # explicit save-mode choice instead, which can itself be
+                # cancelled to come back here. ctrl+q remains the
+                # unconditional "just quit and keep everything, right now"
+                # escape hatch, unaffected by any of this.
+                self.awaiting_extend = False
+                self._awaiting_save_choice = True
                 self.mount_note(f"[yellow]Stopped at {self.total_rounds} turns.[/yellow]")
-                self.set_status(
-                    f"Stopped at {self.total_rounds} turns. Type a number to extend, or ctrl+q to quit and save."
-                )
+                self.set_status(self.SAVE_CHOICE_PROMPT)
             else:
                 # Not a number and not a recognized "stop" word - treat it as
                 # a genuine moderator note rather than guessing, and keep
@@ -756,6 +769,75 @@ class DialogueScreen(Screen):
 
         if value:
             self._inject_moderator_note(value)
+
+    def _handle_save_choice(self, value: str) -> None:
+        choice = value.strip().lower()
+        if choice.isdigit() and int(choice) > 0:
+            # Typing a number always means "give me more turns," regardless
+            # of which sub-prompt is showing - equivalent to 'cancel' then
+            # extending, in one step, rather than forcing that as two.
+            self._awaiting_save_choice = False
+            self.total_rounds += int(choice)
+            self.awaiting_extend = False
+            self.mount_note(f"Extending — now running to turn {self.total_rounds}.")
+            self.set_status("")
+            self.take_turn()
+        elif choice in ("", "full", "f"):
+            self._finalize_and_quit("full")
+        elif choice in ("result", "r", "end", "e"):
+            self._finalize_and_quit("result")
+        elif choice in ("none", "n", "discard"):
+            self._finalize_and_quit("none")
+        elif choice in ("cancel", "c", "back", "resume"):
+            self._awaiting_save_choice = False
+            self.awaiting_extend = True
+            self.mount_note("Cancelled - back to where you left off.")
+            self.set_status(
+                f"Stopped at {self.total_rounds} turns. Type a number to extend, or 'stop' to finish "
+                f"(ctrl+q quits and saves)."
+            )
+        else:
+            self.mount_note(f"[red]Didn't understand '{value}'.[/red]")
+            self.set_status(self.SAVE_CHOICE_PROMPT)
+
+    def _finalize_and_quit(self, mode: str) -> None:
+        """mode is 'full' (keep everything, default), 'result' (replace the
+        verbose transcript/reasoning log with one distilled result file), or
+        'none' (discard every file this session produced). Only ever
+        touches this session's own transcript_path/reasoning_path/code_dir -
+        never anything else."""
+        if mode in ("full", "result") and self._latest_answer:
+            save_final_answer_code(self._latest_answer, self.code_dir)
+
+        if mode == "full":
+            self._write_transcript()
+        elif mode == "result":
+            result_path = self.transcript_path.with_name(self.transcript_path.stem + "_result.md")
+            result_path.write_text(self._build_result_text())
+            self.transcript_path.unlink(missing_ok=True)
+            self.reasoning_path.unlink(missing_ok=True)
+        elif mode == "none":
+            self.transcript_path.unlink(missing_ok=True)
+            self.reasoning_path.unlink(missing_ok=True)
+            if self.code_dir.exists():
+                shutil.rmtree(self.code_dir, ignore_errors=True)
+
+        self._exit_now()
+
+    def _build_result_text(self) -> str:
+        lines = [
+            "# Disput Result\n",
+            f"**Topic:** {self.topic}\n",
+            f"**Model A:** {self.cfg_a.label} ({self.cfg_a.model})\n",
+            f"**Model B:** {self.cfg_b.label} ({self.cfg_b.model})\n",
+            f"**Turns:** {self.turn}\n",
+        ]
+        if self._latest_answer:
+            turn_no, label = self._latest_answer_meta
+            lines.append(f"\n## Final Answer\n\n_(reached on Turn {turn_no} — {label})_\n\n{self._latest_answer}\n")
+        else:
+            lines.append("\n_No <answer> block was ever produced during this run._\n")
+        return "\n".join(lines)
 
     def _inject_moderator_note(self, value: str) -> None:
         injected = f"[Moderator note]: {value}"
@@ -777,7 +859,15 @@ class DialogueScreen(Screen):
                 self.take_turn()
 
     def action_quit_app(self) -> None:
+        # ctrl+q: unconditional "just quit and keep everything, right now"
+        # escape hatch - always the 'full' behavior, unaffected by whatever
+        # state the save-choice flow (_finalize_and_quit) is in.
         self._write_transcript()
+        if self._latest_answer:
+            save_final_answer_code(self._latest_answer, self.code_dir)
+        self._exit_now()
+
+    def _exit_now(self) -> None:
         self.app.exit()
         # Safety net: a still-blocked in-flight call_model() (e.g. a remote
         # model taking a long time) runs on a thread-pool worker thread, and

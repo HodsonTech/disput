@@ -92,7 +92,6 @@ class ModelConfig:
 class ModelReply:
     thinking: str | None
     final: str
-    code_blocks: list[tuple[str, str]]  # (language, code)
     answer: str | None = None
     done: bool = False
     prompt_tokens: int = 0
@@ -156,8 +155,6 @@ def call_model(
         else:
             thinking, final = None, raw_content
 
-    code_blocks = [(lang.strip().lower(), code.strip()) for lang, code in CODE_FENCE_PATTERN.findall(final)]
-
     # Deliberately NOT stripped out of `final`: that string also becomes
     # this turn's entry in both models' ongoing conversation history, and
     # removing the tag risks leaving an empty message there if a reply was
@@ -181,7 +178,6 @@ def call_model(
     return ModelReply(
         thinking=thinking,
         final=final,
-        code_blocks=code_blocks,
         answer=answer,
         done=done,
         prompt_tokens=prompt_tokens,
@@ -190,15 +186,21 @@ def call_model(
     )
 
 
-def save_code_blocks(code_blocks: list[tuple[str, str]], out_dir: Path, turn: int, label: str) -> list[Path]:
-    """Writes each code block to its own file under out_dir, named by turn
-    number, speaker label, and index. Returns the paths written."""
+def save_final_answer_code(answer_text: str, out_dir: Path) -> list[Path]:
+    """Extracts any fenced code blocks from the final agreed-upon answer and
+    writes each to its own file. Deliberately NOT done per-turn for every
+    fragment either model writes along the way - that produced a pile of
+    small, disconnected, out-of-context snippets with no coherent final
+    result. The final answer is the one thing actually worth having as a
+    standalone file."""
+    code_blocks = [(lang.strip().lower(), code.strip()) for lang, code in CODE_FENCE_PATTERN.findall(answer_text)]
+    if not code_blocks:
+        return []
     out_dir.mkdir(parents=True, exist_ok=True)
-    safe_label = re.sub(r"[^a-zA-Z0-9_-]+", "_", label)
     written = []
     for i, (lang, code) in enumerate(code_blocks, start=1):
         ext = LANG_EXT.get(lang, "txt")
-        path = out_dir / f"turn_{turn:02d}_{safe_label}_{i}.{ext}"
+        path = out_dir / f"answer_{i}.{ext}"
         path.write_text(code + "\n")
         written.append(path)
     return written
