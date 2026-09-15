@@ -111,6 +111,16 @@ testing is needed here, this isn't a settled result.
   since it was previously invisible anywhere in the app and genuinely
   surprised a user who assumed the topic's "one of you / the other" framing
   was left entirely up to the models to sort out themselves.
+- **"Already used by the other side" marker**: `SourceSetupScreen` takes an
+  optional `other_cfg: ModelConfig | None` - the other side's already-chosen
+  config, passed whenever it's known (`_got_a` setting up B, or
+  `action_fix_broken_model`'s error recovery, which knows both sides
+  regardless of which one broke). `show_source_step()` appends `"  ★ Model
+  {other_side} is using this"` to any source whose `base_url` matches;
+  `show_model_step()` does the same by `base_url` + exact model id. Purely
+  a display suffix on the `Option` prompt - the underlying `id` used for
+  selection (`src-{i}` / the raw model id) is untouched. Previously gave no
+  indication at all that a source/model was already in use by the other side.
 - **Reasoning traces** are shown in a collapsible panel per turn in the TUI
   and written to `~/Transcripts/disput_<session>_reasoning.log`, but are
   deliberately **NOT** fed into either model's ongoing conversation history -

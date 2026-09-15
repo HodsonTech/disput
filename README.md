@@ -232,7 +232,10 @@ I should simply confirm the finality and end the dialogue as per the instruction
   title), so you can pick which real model goes in which seat on purpose.
 - Each source's `/v1/models` is queried live and shown as a pickable list, so
   you always select from what's actually loaded right now rather than typing
-  a model id from memory.
+  a model id from memory. Whichever source/model the *other* side is already
+  using gets a `★ Model A/B is using this` marker, so setting up the second
+  side doesn't leave you guessing whether you're about to pick the same one
+  twice.
 - Set a display label and system prompt per model (defaults are pre-filled
   and editable), then a starting topic and a turn count - extendable
   mid-run rather than something you have to guess up front.
