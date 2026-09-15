@@ -82,7 +82,23 @@ class ModelReply:
     code_blocks: list[tuple[str, str]]  # (language, code)
 
 
-def call_model(client: OpenAI, cfg: ModelConfig, history: list[dict], temperature: float = 0.7) -> ModelReply:
+# Generous on purpose - local/CPU inference and heavy "thinking" models can
+# legitimately take minutes for one reply. This exists purely as an upper
+# bound so a genuinely stuck backend eventually surfaces as an error
+# instead of blocking forever - confirmed the hard way: with no timeout at
+# all, a slow remote call left ctrl+q unable to actually terminate the
+# process, since Python won't exit while a thread-pool worker is still
+# blocked on it, however long that takes.
+DEFAULT_TIMEOUT_SECONDS = 300.0
+
+
+def call_model(
+    client: OpenAI,
+    cfg: ModelConfig,
+    history: list[dict],
+    temperature: float = 0.7,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> ModelReply:
     """history is a list of {'role': 'user'/'assistant', 'content': str} from
     THIS model's point of view (its own prior turns are 'assistant', the
     other model's turns come in as 'user')."""
@@ -103,6 +119,7 @@ def call_model(client: OpenAI, cfg: ModelConfig, history: list[dict], temperatur
         messages=messages,
         temperature=temperature,
         extra_body=extra_body or None,
+        timeout=timeout,
     )
     message = resp.choices[0].message
     raw_content = (message.content or "").strip()

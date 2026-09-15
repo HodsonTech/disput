@@ -4,7 +4,9 @@ a live dialogue screen."""
 
 from __future__ import annotations
 
+import os
 import re
+import threading
 from dataclasses import replace as replace_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -647,6 +649,19 @@ class DialogueScreen(Screen):
     def action_quit_app(self) -> None:
         self._write_transcript()
         self.app.exit()
+        # Safety net: a still-blocked in-flight call_model() (e.g. a remote
+        # model taking a long time) runs on a thread-pool worker thread, and
+        # Python won't let the process actually terminate until every such
+        # thread finishes - confirmed this can leave ctrl+q unable to
+        # force-quit for as long as that call takes, with no cap. Give
+        # Textual's own teardown (which restores the terminal - usually
+        # near-instant) a couple of seconds to finish normally, then
+        # guarantee the process actually ends regardless of what any
+        # background thread is still doing. Never fires in the normal case:
+        # the process has already fully exited well within 2s.
+        force_exit_timer = threading.Timer(2.0, os._exit, args=(0,))
+        force_exit_timer.daemon = True  # must not itself hold up a normal, fast exit
+        force_exit_timer.start()
 
     def action_new_topic(self) -> None:
         if self.turn_in_progress:
