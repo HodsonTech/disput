@@ -94,9 +94,28 @@ class SourceSetupScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(f" Setting up Model {self.side_label} ", id="step-title")
+        title = Static(f" Setting up Model {self.side_label} ", id="step-title")
+        title.tooltip = self._role_hint_text()  # free - costs no vertical space
+        yield title
         yield VerticalScroll(id="body")
         yield Footer()
+
+    def _role_hint_text(self) -> str:
+        # The turn order is fixed (A always goes first, B always second),
+        # which quietly assigns asymmetric roles for any topic that asks
+        # for one ("one of you propose, the other critique") - worth
+        # surfacing up front rather than users discovering it by asking.
+        if self.side_label == "A":
+            return (
+                "Model A goes first every turn - it sees the bare topic with no other "
+                "input yet, so it effectively becomes the proposer for any topic that "
+                "assigns asymmetric roles."
+            )
+        return (
+            "Model B always responds second, after seeing Model A's turn - it "
+            "effectively becomes the chaperone/critic: reacting to and checking A's "
+            "output rather than opening cold."
+        )
 
     def on_mount(self) -> None:
         self.show_source_step()
@@ -116,6 +135,7 @@ class SourceSetupScreen(Screen):
         ]
         options.append(Option("+ Add a new source (endpoint + API key)", id="__new__"))
         self.set_body(
+            Static(f"[dim]{self._role_hint_text()}[/dim]"),
             Static("Pick a saved source, or add a new one:"),
             OptionList(*options, id="source-list"),
             Static("[dim]Enter: use it   •   e: edit   •   d: delete the highlighted source[/dim]"),
@@ -839,6 +859,7 @@ class DisputApp(App):
     ENABLE_COMMAND_PALETTE = False
     CSS = """
     #step-title { padding: 1 2; text-style: bold; }
+    #role-hint { padding: 0 2 1 2; }
     #body { padding: 1 2; height: auto; }
     /* TextArea defaults to height: 1fr (greedily fills all remaining space
        in its container), which pushed the Continue/Start button just past
