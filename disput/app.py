@@ -64,7 +64,7 @@ class SourceSetupScreen(Screen):
     model -> set label + system prompt. Dismisses with a ModelConfig."""
 
     BINDINGS = [
-        ("escape", "app.pop_screen", "Back"),
+        ("escape", "go_back", "Back"),
         ("e", "edit_highlighted_source", "Edit source"),
         ("ctrl+s", "submit_details", "Continue"),
     ]
@@ -77,24 +77,32 @@ class SourceSetupScreen(Screen):
         self.chosen_model: str | None = None
         self._sources: list[cfgstore.Source] = []
         self._editing_source: cfgstore.Source | None = None
+        self._last_models: list[str] = []
+        # Tracks which internal wizard step is showing, so `escape` can step
+        # back through them instead of popping the whole screen - popping
+        # here would reveal the app's empty base screen (a previous step's
+        # screen is already gone by the time this one exists), not a real
+        # "back" destination, which is what caused the black-screen bug.
+        self._step = "source"
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(f" Setting up Model {self.side_label} ", id="step-title")
-        yield Vertical(id="body")
+        yield VerticalScroll(id="body")
         yield Footer()
 
     def on_mount(self) -> None:
         self.show_source_step()
 
     def set_body(self, *widgets) -> None:
-        body = self.query_one("#body", Vertical)
+        body = self.query_one("#body", VerticalScroll)
         body.remove_children()
         body.mount_all(widgets)
 
     # -- step 1: pick or add a source -----------------------------------
 
     def show_source_step(self) -> None:
+        self._step = "source"
         self._sources = cfgstore.load_sources()
         options = [
             Option(f"{s.name}  —  {s.base_url}", id=f"src-{i}") for i, s in enumerate(self._sources)
@@ -106,6 +114,22 @@ class SourceSetupScreen(Screen):
             Static("[dim]Enter: use it   •   e: edit the highlighted source[/dim]"),
         )
         self.query_one("#source-list", OptionList).focus()
+
+    def action_go_back(self) -> None:
+        """Step back through the wizard's own steps. Deliberately never
+        pops the Screen itself: by the time a later step exists, the screen
+        for whatever came before it (e.g. Model A's setup) has usually
+        already been dismissed, so popping would reveal the app's empty
+        base screen instead of anything navigable."""
+        if self._step == "source":
+            return  # nothing earlier to go back to within this screen
+        if self._step in ("custom_source", "fetch_error", "model", "manual_model"):
+            self.show_source_step()
+        elif self._step == "details":
+            if self._last_models:
+                self.show_model_step(self._last_models)
+            else:
+                self.show_manual_model_step()
 
     def action_edit_highlighted_source(self) -> None:
         try:
@@ -137,6 +161,7 @@ class SourceSetupScreen(Screen):
     # -- step 1b: add a new source ---------------------------------------
 
     def show_custom_source_step(self, editing: cfgstore.Source | None = None) -> None:
+        self._step = "custom_source"
         self._editing_source = editing
         title = f"Editing '{editing.name}' (change the name to save as a new source instead):" if editing else "New source:"
         self.set_body(
@@ -186,6 +211,7 @@ class SourceSetupScreen(Screen):
     # -- step 2: fetch models from the chosen source ----------------------
 
     def fetch_models(self) -> None:
+        self._step = "fetching"
         self.set_body(
             LoadingIndicator(),
             Static(f"Fetching models from {self.chosen_source.base_url} ..."),
@@ -203,6 +229,7 @@ class SourceSetupScreen(Screen):
         self.app.call_from_thread(self.show_model_step, models)
 
     def show_fetch_error(self, exc: Exception) -> None:
+        self._step = "fetch_error"
         self.set_body(
             Static(f"[red]Couldn't fetch models: {exc}[/red]"),
             Horizontal(
@@ -216,6 +243,8 @@ class SourceSetupScreen(Screen):
         if not models:
             self.show_fetch_error(RuntimeError("source reported zero models"))
             return
+        self._step = "model"
+        self._last_models = models
         options = [Option(m, id=m) for m in models]
         options.append(Option("(enter a model id manually instead)", id="__manual__"))
         self.set_body(
@@ -225,6 +254,7 @@ class SourceSetupScreen(Screen):
         self.query_one("#model-list", OptionList).focus()
 
     def show_manual_model_step(self) -> None:
+        self._step = "manual_model"
         self.set_body(
             Static("Enter the exact model id as the server expects it:"),
             Input(placeholder="e.g. unsloth/gemma-4-26B-A4B-it-GGUF", id="manual-model-input"),
@@ -249,6 +279,7 @@ class SourceSetupScreen(Screen):
     # -- step 3: label + system prompt ------------------------------------
 
     def show_details_step(self) -> None:
+        self._step = "details"
         label = guess_label(self.chosen_model)
         prompt = DEFAULT_SYSTEM_TEMPLATE.format(label=label, other_label=self.other_label)
         self.set_body(
@@ -290,7 +321,7 @@ class TopicScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(" Topic & length ", id="step-title")
-        yield Vertical(
+        yield VerticalScroll(
             Static("Starting topic/prompt for the dialogue:"),
             TextArea(DEFAULT_TOPIC, id="topic-area"),
             Static("How many turns total?"),
