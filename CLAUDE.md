@@ -254,7 +254,11 @@ testing is needed here, this isn't a settled result.
   above - and was fixed differently: made it an actually-scrollable
   `VerticalScroll` (ctrl+f to expand) instead of truncating, since unlike
   the topic banner its content is something the user actively wants to
-  read in full, not just skim.
+  read in full, not just skim. `#status` hit the inverse of this bug: fixed
+  `height: 1` instead of `auto`, so a long status message (several run past
+  140 chars) got silently clipped to one line instead of wrapping - same
+  root lesson (don't fix the height of something whose content length you
+  don't control), opposite direction (too short, not too tall).
 - **`CollapsibleTitle` defaults to `width: auto`** - only as wide as its
   label text, left-anchored, while the bar rendered on screen spans the
   full container width. Clicking anywhere past the label silently did
