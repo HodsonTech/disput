@@ -372,9 +372,9 @@ only `ctrl+q` does that unconditionally.
   trace, extracting code from the final answer.
 - `disput/app.py` - the Textual TUI: the setup wizard and the live
   dialogue screen.
-- `dialogue_output/` and `transcripts/` are generated at runtime and
-  gitignored - **relative to whatever directory you were in when you ran
-  `disput`**, not a fixed location. This matters more than it sounds: a
+- `dialogue_output/` and `transcripts/` are generated at runtime,
+  **relative to whatever directory you were in when you ran `disput`**,
+  not a fixed location. This matters more than it sounds: a
   `pipx`/`pip install -e .` install puts `disput` on your PATH globally, so
   it's runnable from anywhere - run it from your home directory instead of
   the repo folder and that's where these two folders show up. If you can't
