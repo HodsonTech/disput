@@ -57,6 +57,14 @@ testing is needed here, this isn't a settled result.
 - `pyproject.toml` - `pip install -e .` gives a `disput` console script.
 - `presets.example.json` - documentation only, never read at runtime.
 - `dialogue_output/` and `transcripts/` - generated at runtime, gitignored.
+  Both are `Path("dialogue_output")`/`Path("transcripts")` in `app.py` -
+  **relative to CWD at launch, not a fixed location.** Harmless when run via
+  `python3 main.py` from inside the repo (the assumed original workflow),
+  but a `pipx`/`pip install -e .` install puts `disput` on PATH globally,
+  so it's now genuinely runnable from anywhere - output lands wherever the
+  user happened to be standing, not somewhere predictable. Flagged, not yet
+  fixed: candidate fix is anchoring both under `~/.disput/` alongside
+  `presets.json`, same reasoning that already applies there.
 - Legacy artifacts from the old two-script version
   (`dialogue_transcript_gemma.md`, `reasoning_feed_gemma.log`) are still on
   disk but gitignored - kept as prior session data, not part of the tool.

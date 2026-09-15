@@ -175,7 +175,13 @@ quitting the app.
 - `disput/app.py` - the Textual TUI: the setup wizard and the live
   dialogue screen.
 - `dialogue_output/` and `transcripts/` are generated at runtime and
-  gitignored.
+  gitignored - **relative to whatever directory you were in when you ran
+  `disput`**, not a fixed location. This matters more than it sounds: a
+  `pipx`/`pip install -e .` install puts `disput` on your PATH globally, so
+  it's runnable from anywhere - run it from your home directory instead of
+  the repo folder and that's where these two folders show up. If you can't
+  find a transcript, check where you actually launched it from, e.g.
+  `find ~ -maxdepth 4 -name transcripts -type d`.
 
 ## Backend notes
 
