@@ -64,11 +64,21 @@ open question worth testing more, not a settled result.
   never quits on its own either way.
 - Type into the moderator box at any time to inject a note into both models'
   history without stopping the conversation.
-- Any fenced code block either model writes is automatically saved to
-  `dialogue_output/<session>/` as its own file, in addition to appearing in
-  the transcript.
 - A full Markdown transcript and a raw reasoning log are written to
   `transcripts/` continuously as the conversation runs.
+- **When you stop the run** (typing `stop` at the extend-or-stop prompt),
+  you're asked how to save it:
+  - `full` (default) - keep the transcript + reasoning log, plus extract any
+    code specifically from the final answer to `dialogue_output/<session>/`.
+  - `result` - discard the verbose transcript, write one distilled
+    `..._result.md` instead (topic + final answer only).
+  - `none` - delete every file this run produced.
+  - `cancel` - back out and keep going, no files touched.
+
+  Earlier versions saved every fenced code block from every turn as its own
+  file - a pile of small, disconnected fragments with no context. Only the
+  final answer is extracted now, since that's the one thing actually worth
+  having as a standalone file.
 
 ## Setup
 
@@ -167,9 +177,11 @@ Model B -> topic + turn count -> live dialogue.
 - `ctrl+q` - quit and save
 
 Type in the moderator box + Enter any time to inject a note without
-stopping the conversation. When the turn limit is hit, type a number there
-to extend by that many turns, or `stop` (or just Enter) to wrap up without
-quitting the app.
+stopping the conversation. When the turn limit is hit (or both models
+signal they're done), type a number there to extend by that many turns, or
+`stop` (or just Enter) to move to the save-mode prompt above (`full` /
+`result` / `none` / `cancel`) - nothing here quits the app on its own,
+only `ctrl+q` does that unconditionally.
 
 ## Where things live
 
@@ -177,7 +189,7 @@ quitting the app.
   `~/.disput/presets.json` (outside the repo, deliberately - so API keys
   never end up in git even once this repo goes public).
 - `disput/client.py` - talking to a model, splitting out its reasoning
-  trace, extracting fenced code blocks.
+  trace, extracting code from the final answer.
 - `disput/app.py` - the Textual TUI: the setup wizard and the live
   dialogue screen.
 - `dialogue_output/` and `transcripts/` are generated at runtime and

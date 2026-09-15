@@ -50,7 +50,8 @@ testing is needed here, this isn't a settled result.
 - `disput/client.py` - `list_models()` (queries `/v1/models` live for the
   source picker), `call_model()` (reasoning-trace splitting, same dual
   handling as before: a `reasoning_content` field OR inline
-  `<think>...</think>` tags), and code-block extraction/saving.
+  `<think>...</think>` tags), and `save_final_answer_code()` (extracts code
+  from the final answer only - see "Code extraction" below).
 - `disput/app.py` - the Textual app: `SourceSetupScreen` (pick/add a
   source -> fetch its models -> pick one -> label + system prompt; run once
   per side), `TopicScreen`, `DialogueScreen` (the live turn loop).
@@ -187,12 +188,43 @@ testing is needed here, this isn't a settled result.
   and pushes a brand-new `DialogueScreen` with the same `cfg_a`/`cfg_b` -
   clean history, its own transcript/reasoning/code-output files - rather
   than resetting the current screen in place or requiring a full restart.
-- **Code extraction**: any fenced code block in a reply is pulled out and
-  saved to `dialogue_output/<session>/turn_NN_<label>_<i>.<ext>`, language
-  guessed from the fence tag.
+- **Code extraction**: no longer per-turn. That used to save every fenced
+  code block from every turn as its own `turn_NN_<label>_<i>.<ext>` file -
+  a real user complaint: "some nonsense code that's meaningless," a pile of
+  small, disconnected, out-of-context fragments with no coherent final
+  result. Removed entirely (`ModelReply.code_blocks`, `save_code_blocks()`,
+  the per-turn extraction in `handle_turn_result`). Replaced with
+  `client.save_final_answer_code()`, called only from the save-choice flow
+  below (`full`/`result` modes) - extracts code from `self._latest_answer`
+  specifically, saved as `dialogue_output/<session>/answer_N.<ext>`. The
+  final answer is the one thing actually worth having as a standalone file.
+- **Save-choice flow**: typing `stop` at the `awaiting_extend` prompt no
+  longer just idles - it sets `self._awaiting_save_choice = True` and shows
+  `SAVE_CHOICE_PROMPT`. `_handle_save_choice()` dispatches: a bare number
+  still extends immediately (equivalent to `cancel` + extending, in one
+  step, so the old "type a number after stop" convenience isn't lost);
+  `full`/`result`/`none` call `_finalize_and_quit(mode)`; `cancel` reverts
+  to `awaiting_extend = True`. `_finalize_and_quit`:
+  - `full` (default) - `_write_transcript()` one last time, extract final-
+    answer code if any, then exit. Everything kept.
+  - `result` - writes one distilled `_build_result_text()` to
+    `<stem>_result.md`, then `unlink(missing_ok=True)`s the verbose
+    transcript and reasoning log.
+  - `none` - deletes the transcript, reasoning log, and `shutil.rmtree`s
+    `code_dir` if it exists. Only ever touches this session's own
+    `transcript_path`/`reasoning_path`/`code_dir` - never anything else.
+  - All three (plus `ctrl+q`'s `action_quit_app`, the unconditional "quit
+    now, keep everything" escape hatch, unaffected by any of this) funnel
+    into a shared `_exit_now()` for the actual exit mechanics (the
+    daemon safety-net timer). Deliberately NOT calling `action_quit_app()`
+    from `_finalize_and_quit()` - it unconditionally re-extracts final-
+    answer code, which would silently undo `none`'s deletion.
 - Transcript is written continuously (not just at the end) to
   `transcripts/disput_<session>.md`, each turn's reasoning wrapped in a
-  collapsible `<details><summary>🧠 Thinking</summary>` block.
+  collapsible `<details><summary>🧠 Thinking</summary>` block. Session IDs
+  use microsecond precision (`%Y%m%d_%H%M%S_%f`) - second precision let two
+  `DialogueScreen`s created within the same second (e.g. `ctrl+n` right
+  after startup) collide and silently overwrite each other's transcript.
 
 ## Known open items
 
