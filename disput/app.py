@@ -389,6 +389,7 @@ class DialogueScreen(Screen):
     BINDINGS = [
         ("ctrl+p", "toggle_pause", "Pause/Resume"),
         ("ctrl+q", "quit_app", "Quit & Save"),
+        ("escape", "fix_broken_model", "Fix model (after an error)"),
     ]
 
     def __init__(self, cfg_a: ModelConfig, cfg_b: ModelConfig, topic: str, total_rounds: int) -> None:
@@ -409,6 +410,7 @@ class DialogueScreen(Screen):
         self.paused = False
         self.awaiting_extend = False
         self.turn_in_progress = False
+        self._error_side: str | None = None
 
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -454,15 +456,43 @@ class DialogueScreen(Screen):
         try:
             reply = call_model(client, cfg, history)
         except Exception as exc:  # noqa: BLE001 - network/backend error, surface and pause rather than crash
-            self.app.call_from_thread(self.handle_turn_error, exc)
+            self.app.call_from_thread(self.handle_turn_error, current, cfg, exc)
             return
         self.app.call_from_thread(self.handle_turn_result, turn_no, current, cfg, reply)
 
-    def handle_turn_error(self, exc: Exception) -> None:
+    def handle_turn_error(self, current: str, cfg: ModelConfig, exc: Exception) -> None:
         self.turn_in_progress = False
         self.paused = True
+        self._error_side = current
         self.mount_note(f"[red]Error calling model: {exc}[/red]")
-        self.set_status("Paused after an error. Fix the issue, then press ctrl+p to retry.")
+        self.set_status(
+            f"Paused after an error. ctrl+p to retry as-is, or escape to swap out Model {current}'s "
+            f"source/model ({cfg.label})."
+        )
+
+    def action_fix_broken_model(self) -> None:
+        if self._error_side is None:
+            return  # nothing broken right now - don't let escape do anything surprising
+        side = self._error_side
+        other_label = self.cfg_b.label if side == "A" else self.cfg_a.label
+        self.app.push_screen(
+            SourceSetupScreen(side_label=side, other_label=other_label),
+            callback=self._model_fixed,
+        )
+
+    def _model_fixed(self, new_cfg: ModelConfig) -> None:
+        side = self._error_side
+        if side == "A":
+            self.cfg_a = new_cfg
+            self.client_a = make_client(new_cfg.base_url, new_cfg.api_key)
+        else:
+            self.cfg_b = new_cfg
+            self.client_b = make_client(new_cfg.base_url, new_cfg.api_key)
+        self.mount_note(f"Model {side} switched to {new_cfg.label} ({new_cfg.model}). Resuming...")
+        self._error_side = None
+        self.paused = False
+        self.set_status("")
+        self.take_turn()
 
     def handle_turn_result(self, turn_no: int, current: str, cfg: ModelConfig, reply: ModelReply) -> None:
         self.turn = turn_no

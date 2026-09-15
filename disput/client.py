@@ -44,7 +44,12 @@ LANG_EXT = {
 
 
 def make_client(base_url: str, api_key: str) -> OpenAI:
-    return OpenAI(base_url=base_url, api_key=api_key)
+    # The openai SDK refuses to construct a client at all with an empty
+    # api_key ("Missing credentials"), even though plenty of local
+    # OpenAI-compatible servers don't check it. A source is allowed to have
+    # a blank key (the setup form doesn't require one) - fall back to a
+    # placeholder so that's still a valid, working configuration.
+    return OpenAI(base_url=base_url, api_key=api_key or "not-needed")
 
 
 def list_models(base_url: str, api_key: str) -> list[str]:
