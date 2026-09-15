@@ -937,9 +937,13 @@ class DialogueScreen(Screen):
         # data straight from each response's `usage` object, useful for
         # actually comparing what two disparate models/hardware cost to
         # reach whatever conclusion they reached.
+        # Full model labels (can be long, e.g. "MiniCPM5-2B-heretic-
+        # abliterated") left almost no room in the title bar - just the
+        # side letter is enough context here since the labels are already
+        # shown throughout the log itself.
         a_tokens = self._usage_tokens["A"]
         b_tokens = self._usage_tokens["B"]
-        self.sub_title = f"{self.cfg_a.label}: {a_tokens:,} tok  ·  {self.cfg_b.label}: {b_tokens:,} tok"
+        self.sub_title = f"A: {a_tokens:,} tok  ·  B: {b_tokens:,} tok"
 
     def mount_turn_widget(self, turn_no: int, current: str, cfg: ModelConfig, reply: ModelReply) -> None:
         log = self.query_one("#log", VerticalScroll)
@@ -1033,7 +1037,12 @@ class DisputApp(App):
     #answer-panel { border-bottom: solid $success; }
     #answer-panel-text { padding: 1 2; }
     #log { padding: 1 2; }
-    #status { padding: 0 2; color: $text-muted; height: 1; }
+    /* height: auto (not a fixed 1) - some status messages (the
+       extend/stop/save-choice prompts especially) run well past one
+       terminal-width line; a fixed height silently clipped the tail
+       instead of wrapping. #log naturally yields space since it has no
+       explicit height of its own. */
+    #status { padding: 0 2; color: $text-muted; height: auto; }
     #moderator-input { margin: 0 1 1 1; }
     /* Vertical defaults to height: 1fr - it was competing with every other
        turn for a fractional share of #log's VISIBLE VIEWPORT rather than
