@@ -80,10 +80,16 @@ class SourceSetupScreen(Screen):
         ("ctrl+s", "submit_details", "Continue"),
     ]
 
-    def __init__(self, side_label: str, other_label: str) -> None:
+    def __init__(self, side_label: str, other_label: str, other_cfg: ModelConfig | None = None) -> None:
         super().__init__()
         self.side_label = side_label
         self.other_label = other_label
+        # The OTHER side's already-chosen config, when known (set up second,
+        # or reopened via escape's error-recovery flow) - lets the source
+        # and model lists mark whichever one the other side is already
+        # using, instead of giving no indication at all.
+        self.other_cfg = other_cfg
+        self.other_side = "B" if side_label == "A" else "A"
         self.chosen_source: cfgstore.Source | None = None
         self.chosen_model: str | None = None
         self._sources: list[cfgstore.Source] = []
@@ -135,9 +141,12 @@ class SourceSetupScreen(Screen):
     def show_source_step(self) -> None:
         self._step = "source"
         self._sources = cfgstore.load_sources()
-        options = [
-            Option(f"{s.name}  —  {s.base_url}", id=f"src-{i}") for i, s in enumerate(self._sources)
-        ]
+        options = []
+        for i, s in enumerate(self._sources):
+            marker = ""
+            if self.other_cfg and s.base_url == self.other_cfg.base_url:
+                marker = f"  ★ Model {self.other_side} is using this"
+            options.append(Option(f"{s.name}  —  {s.base_url}{marker}", id=f"src-{i}"))
         options.append(Option("+ Add a new source (endpoint + API key)", id="__new__"))
         self.set_body(
             Static(f"[dim]{self._role_hint_text()}[/dim]"),
@@ -307,7 +316,13 @@ class SourceSetupScreen(Screen):
             return
         self._step = "model"
         self._last_models = models
-        options = [Option(m, id=m) for m in models]
+        same_source_as_other = bool(self.other_cfg) and self.chosen_source.base_url == self.other_cfg.base_url
+        options = []
+        for m in models:
+            marker = ""
+            if same_source_as_other and m == self.other_cfg.model:
+                marker = f"  ★ Model {self.other_side} is using this"
+            options.append(Option(f"{m}{marker}", id=m))
         options.append(Option("(enter a model id manually instead)", id="__manual__"))
         self.set_body(
             Static(f"Models available at {self.chosen_source.base_url}:"),
@@ -650,9 +665,9 @@ class DialogueScreen(Screen):
         if self._error_side is None:
             return  # nothing broken right now - don't let escape do anything surprising
         side = self._error_side
-        other_label = self.cfg_b.label if side == "A" else self.cfg_a.label
+        other_cfg = self.cfg_b if side == "A" else self.cfg_a
         self.app.push_screen(
-            SourceSetupScreen(side_label=side, other_label=other_label),
+            SourceSetupScreen(side_label=side, other_label=other_cfg.label, other_cfg=other_cfg),
             callback=self._model_fixed,
         )
 
@@ -1073,7 +1088,10 @@ class DisputApp(App):
 
     def _got_a(self, cfg_a: ModelConfig) -> None:
         self.cfg_a = cfg_a
-        self.push_screen(SourceSetupScreen(side_label="B", other_label=cfg_a.label), callback=self._got_b)
+        self.push_screen(
+            SourceSetupScreen(side_label="B", other_label=cfg_a.label, other_cfg=cfg_a),
+            callback=self._got_b,
+        )
 
     def _got_b(self, cfg_b: ModelConfig) -> None:
         self.cfg_b = cfg_b
