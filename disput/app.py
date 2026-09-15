@@ -445,7 +445,7 @@ class DialogueScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(f"[b]Topic:[/b] {self.topic}", id="topic-banner")
+        yield Static(f"[b]Topic:[/b] {self._topic_banner_text()}", id="topic-banner")
         yield VerticalScroll(id="log")
         yield Static("", id="status")
         yield Input(placeholder="Type a moderator note and press Enter (or just watch it run)...", id="moderator-input")
@@ -701,6 +701,23 @@ class DialogueScreen(Screen):
 
     # -- UI helpers ------------------------------------------------------------
 
+    TOPIC_BANNER_PREVIEW_CHARS = 240
+
+    def _topic_banner_text(self) -> str:
+        # The banner isn't scrollable and sits above the log, so with no
+        # cap here a long pasted topic would grow to fill the whole screen
+        # and crush the actual conversation down to nothing (confirmed:
+        # a ~11k-char paste left only 2 rows visible for the entire log in
+        # a 24-row terminal). The full topic still goes to both models
+        # unchanged - this only shortens what's DISPLAYED.
+        topic = self.topic
+        if len(topic) <= self.TOPIC_BANNER_PREVIEW_CHARS:
+            return topic
+        return (
+            topic[: self.TOPIC_BANNER_PREVIEW_CHARS].rstrip()
+            + f"… [{len(topic)} chars total - shown truncated, sent to both models in full]"
+        )
+
     def set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(text)
 
@@ -760,7 +777,11 @@ class DisputApp(App):
        ever revealing what came after it. Bounded height + its own internal
        scroll fixes that. */
     #body TextArea { height: 6; }
-    #topic-banner { padding: 1 2; border-bottom: solid $accent; }
+    /* _topic_banner_text() already truncates the displayed text, but this
+       is a hard backstop in case even the truncated preview wraps to many
+       rows on a very narrow terminal - the banner must never be able to
+       push the actual conversation log out of view. */
+    #topic-banner { padding: 1 2; border-bottom: solid $accent; max-height: 8; overflow-y: hidden; }
     #log { padding: 1 2; }
     #status { padding: 0 2; color: $text-muted; height: 1; }
     #moderator-input { margin: 0 1 1 1; }
