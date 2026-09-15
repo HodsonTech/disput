@@ -76,7 +76,23 @@ sudo apt update && sudo apt install pipx git
 git clone https://github.com/HodsonTech/disput.git
 cd disput
 pipx install -e .
+pipx ensurepath
 disput
+```
+
+That `pipx ensurepath` line matters: `pipx install` puts the `disput`
+command in `~/.local/bin`, but on a fresh system that folder usually isn't
+on your PATH yet - so the install succeeds, pipx prints a warning about it,
+and `disput` silently does nothing when you type it (your shell can't find
+it, but doesn't say so). `pipx ensurepath` fixes your PATH for you (usually
+by editing `~/.bashrc`). **Close and reopen your terminal after running
+it** - the fix doesn't apply to the shell session you ran it in, only new
+ones. Then `disput` should resolve normally.
+
+If it still doesn't, check the two things that command fixes:
+```bash
+ls ~/.local/bin/disput            # did pipx actually put it there?
+echo $PATH | tr ':' '\n' | grep local/bin   # is that folder on your PATH?
 ```
 
 If you'd rather not install `pipx`, a plain venv works too, but you have to
