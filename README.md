@@ -218,7 +218,7 @@ The user ended with "All constraints satisfied; allocation is final." This impli
 I should simply confirm the finality and end the dialogue as per the instructions.
 ```
 
-## Example: an actual bug, and a model second-guessing itself mid-reasoning
+## SECOND EXAMPLE: an actual bug, and a model second-guessing itself mid-reasoning
 
 A real code bug this time, not a math problem - a one-line LRU cache bug
 that silently produces the wrong result with no exception thrown. MiniCPM
