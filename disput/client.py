@@ -95,6 +95,9 @@ class ModelReply:
     code_blocks: list[tuple[str, str]]  # (language, code)
     answer: str | None = None
     done: bool = False
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 # Generous on purpose - local/CPU inference and heavy "thinking" models can
@@ -167,7 +170,24 @@ def call_model(
     if done:
         final = DONE_PATTERN.sub("", final).strip()
 
-    return ModelReply(thinking=thinking, final=final, code_blocks=code_blocks, answer=answer, done=done)
+    # Not every OpenAI-compatible backend actually populates this (or the
+    # response could theoretically lack it) - default to 0 rather than
+    # letting a missing field blow up the whole call.
+    usage = getattr(resp, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+    total_tokens = getattr(usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+
+    return ModelReply(
+        thinking=thinking,
+        final=final,
+        code_blocks=code_blocks,
+        answer=answer,
+        done=done,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
 
 
 def save_code_blocks(code_blocks: list[tuple[str, str]], out_dir: Path, turn: int, label: str) -> list[Path]:

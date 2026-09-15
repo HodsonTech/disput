@@ -452,6 +452,7 @@ class DialogueScreen(Screen):
         # without the signal, so it always reflects each side's MOST RECENT
         # turn, not some stale agreement from many turns ago.
         self._converged = {"A": False, "B": False}
+        self._usage_tokens = {"A": 0, "B": 0}  # cumulative total_tokens per side
         self._current_client: OpenAI | None = None
         self._turn_started_at: float | None = None
 
@@ -482,6 +483,7 @@ class DialogueScreen(Screen):
     def on_mount(self) -> None:
         self.query_one("#moderator-input", Input).focus()
         self.set_interval(1.0, self._tick_thinking_status)
+        self._update_usage_title()
         self.take_turn()
 
     # -- turn loop ---------------------------------------------------------
@@ -631,6 +633,9 @@ class DialogueScreen(Screen):
     def handle_turn_result(self, turn_no: int, current: str, cfg: ModelConfig, reply: ModelReply) -> None:
         self.turn = turn_no
         other = "B" if current == "A" else "A"
+
+        self._usage_tokens[current] += reply.total_tokens
+        self._update_usage_title()
 
         self.mount_turn_widget(turn_no, current, cfg, reply)
 
@@ -810,6 +815,16 @@ class DialogueScreen(Screen):
 
     def set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(text)
+
+    def _update_usage_title(self) -> None:
+        # Shows live in the title bar (Header renders Screen.sub_title next
+        # to the app title) - cumulative total_tokens per model, real usage
+        # data straight from each response's `usage` object, useful for
+        # actually comparing what two disparate models/hardware cost to
+        # reach whatever conclusion they reached.
+        a_tokens = self._usage_tokens["A"]
+        b_tokens = self._usage_tokens["B"]
+        self.sub_title = f"{self.cfg_a.label}: {a_tokens:,} tok  ·  {self.cfg_b.label}: {b_tokens:,} tok"
 
     def mount_turn_widget(self, turn_no: int, current: str, cfg: ModelConfig, reply: ModelReply) -> None:
         log = self.query_one("#log", VerticalScroll)
