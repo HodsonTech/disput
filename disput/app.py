@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from openai import OpenAI
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -395,6 +396,7 @@ class DialogueScreen(Screen):
     BINDINGS = [
         ("ctrl+p", "toggle_pause", "Pause/Resume"),
         ("ctrl+q", "quit_app", "Quit & Save"),
+        ("ctrl+g", "abort_turn", "Abort turn"),
         ("escape", "fix_broken_model", "Fix model (after an error)"),
     ]
 
@@ -417,6 +419,8 @@ class DialogueScreen(Screen):
         self.awaiting_extend = False
         self.turn_in_progress = False
         self._error_side: str | None = None
+        self._abort_requested = False
+        self._current_client: OpenAI | None = None
 
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -458,13 +462,46 @@ class DialogueScreen(Screen):
         client = self.client_a if current == "A" else self.client_b
         history = list(self.history_a if current == "A" else self.history_b)
 
-        self.app.call_from_thread(self.set_status, f"Turn {turn_no}: {cfg.label} thinking…")
+        self._current_client = client
+        self.app.call_from_thread(self.set_status, f"Turn {turn_no}: {cfg.label} thinking… (ctrl+g to abort)")
         try:
             reply = call_model(client, cfg, history)
         except Exception as exc:  # noqa: BLE001 - network/backend error, surface and pause rather than crash
-            self.app.call_from_thread(self.handle_turn_error, current, cfg, exc)
+            if self._abort_requested:
+                self._abort_requested = False
+                self.app.call_from_thread(self.handle_turn_aborted, current)
+            else:
+                self.app.call_from_thread(self.handle_turn_error, current, cfg, exc)
             return
         self.app.call_from_thread(self.handle_turn_result, turn_no, current, cfg, reply)
+
+    def action_abort_turn(self) -> None:
+        if not self.turn_in_progress:
+            return  # nothing in flight to abort
+        self._abort_requested = True
+        # Best-effort: closing the client's connection pool out from under
+        # an in-flight request is enough to make most local servers raise a
+        # transport error and give up, which is the only real cancellation
+        # lever the sync openai client offers.
+        if self._current_client is not None:
+            try:
+                self._current_client.close()
+            except Exception:
+                pass
+
+    def handle_turn_aborted(self, current: str) -> None:
+        self.turn_in_progress = False
+        self.paused = True
+        # The old client's connection pool was just torn down to abort the
+        # request - replace it so the next attempt gets a working one.
+        if current == "A":
+            self.client_a = make_client(self.cfg_a.base_url, self.cfg_a.api_key)
+        else:
+            self.client_b = make_client(self.cfg_b.base_url, self.cfg_b.api_key)
+        self.mount_note("[yellow]Turn aborted.[/yellow]")
+        self.set_status(
+            f"Turn aborted. Type a moderator note to redirect Model {current} if you like, then ctrl+p to continue."
+        )
 
     def handle_turn_error(self, current: str, cfg: ModelConfig, exc: Exception) -> None:
         self.turn_in_progress = False
@@ -618,9 +655,22 @@ class DialogueScreen(Screen):
 
 class DisputApp(App):
     TITLE = "Disput"
+    # Textual's command palette defaults to ctrl+p as a *priority* binding,
+    # which unconditionally wins over any screen-level binding for the same
+    # key - silently swallowing DialogueScreen's ctrl+p (Pause/Resume) every
+    # time. Disput has no command providers to offer the palette anyway, so
+    # just disable it and reclaim the key.
+    ENABLE_COMMAND_PALETTE = False
     CSS = """
     #step-title { padding: 1 2; text-style: bold; }
     #body { padding: 1 2; height: auto; }
+    /* TextArea defaults to height: 1fr (greedily fills all remaining space
+       in its container), which pushed the Continue/Start button just past
+       the visible edge no matter how big the terminal got - growing the
+       window just gave the text area more space to expand into instead of
+       ever revealing what came after it. Bounded height + its own internal
+       scroll fixes that. */
+    #body TextArea { height: 6; }
     #topic-banner { padding: 1 2; border-bottom: solid $accent; }
     #log { padding: 1 2; }
     #status { padding: 0 2; color: $text-muted; height: 1; }
