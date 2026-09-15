@@ -50,7 +50,12 @@ open question worth testing more, not a settled result.
   silently told to wrap their current best answer in `<answer>...</answer>`
   whenever they have one - they can keep discussing after, and post an
   updated one later if it's refined. The panel always shows the latest one,
-  so you don't have to read through the back-and-forth to find it.
+  so you don't have to read through the back-and-forth to find it. It
+  scrolls independently of the main log (`ctrl+f` toggles it between a
+  compact peek and an expanded view) for a long answer, and once the run
+  actually wraps up, the full answer is also appended into the log itself
+  as a clearly marked block - readable in the normal scrollback, not just
+  the panel.
 - **Stops the self-congratulation loop early**: if both models independently
   signal they genuinely have nothing more to add, the dialogue pauses with
   the same extend-or-stop prompt used at the turn limit - instead of
@@ -157,6 +162,7 @@ Model B -> topic + turn count -> live dialogue.
 - `ctrl+p` - pause/resume
 - `ctrl+g` - abort the current in-flight turn (e.g. it's hanging/stalled)
 - `ctrl+n` - start a fresh topic with the same two models, no re-setup
+- `ctrl+f` - expand/collapse the Current Answer panel for a longer answer
 - `esc` - after an error, reopen setup for whichever model broke
 - `ctrl+q` - quit and save
 

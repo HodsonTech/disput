@@ -125,13 +125,28 @@ testing is needed here, this isn't a settled result.
 - **Current Answer panel**: `client.py`'s `call_model()` extracts an
   `<answer>...</answer>` block into `ModelReply.answer` without stripping it
   out of `final` (stripping risked an empty history entry if a reply was
-  nothing but an answer block). `DialogueScreen` pins the latest one in a
-  dedicated `#answer-panel` above the log - exists because models routinely
-  converge on a real answer several turns before the limit, then spend the
-  rest just agreeing with each other; this surfaces it without needing to
-  read the whole back-and-forth. Same truncation-for-display-only pattern
-  as the topic banner (see Known open items / the topic-banner incident) -
-  the transcript always gets the full text.
+  nothing but an answer block). `DialogueScreen` pins the latest one in
+  `#answer-panel` above the log - exists because models routinely converge
+  on a real answer several turns before the limit, then spend the rest just
+  agreeing with each other; this surfaces it without needing to read the
+  whole back-and-forth.
+  - `#answer-panel` is a `VerticalScroll` (not a plain `Static`), so it's
+    independently scrollable and no longer needs truncation at all - `ctrl+f`
+    (`action_toggle_answer_panel`) toggles its `.styles.height` between
+    `ANSWER_PANEL_COMPACT_HEIGHT` (8) and `ANSWER_PANEL_EXPANDED_HEIGHT`
+    (20) via `_apply_answer_panel_height()`.
+  - That same method sizes it to `"auto"` while `_latest_answer is None` -
+    giving it a fixed compact height even when empty ("No answer proposed
+    yet.") reserved 8 rows for nothing and reproduced the topic-banner
+    crush bug again (combined with the banner, log dropped to 2 visible
+    rows on a huge topic) - caught by the existing `huge_topic_test`
+    regression test, not by inspection.
+  - Once the run pauses (turn limit or mutual convergence), the full answer
+    is also auto-appended into `#log` itself via `_mount_final_answer_block()`
+    as a `.final-answer`-classed block - so it's readable in the normal
+    scrollback too, not just the panel. Guarded by
+    `self._final_answer_mounted_for` (the turn_no already appended) so
+    extending and re-triggering without a new answer doesn't duplicate it.
 - **Mutual-convergence early stop**: unlike `<answer>`, a model's `[DONE]`
   signal is pure metadata (never the substantive content of a reply), so
   `call_model()` strips it out of `final` entirely rather than just
@@ -197,13 +212,17 @@ testing is needed here, this isn't a settled result.
   `height: auto` / bounded `height:` override. Any new container or
   TextArea added to a screen needs one of these checked, not assumed.
 - **Any non-scrollable Static fed user/model-controlled text needs a length
-  cap.** The topic banner and the Current Answer panel both sit above
-  `#log` and aren't scrollable themselves - a huge pasted topic once grew
-  the banner to 154 rows in a 24-row terminal, crushing the entire
-  conversation down to 2 visible rows. Both now truncate the *display*
-  (full text still goes to the model/transcript) plus carry a CSS
-  `max-height` + `overflow-y: hidden` backstop. Copy this pattern for any
-  future banner-like widget.
+  cap - or make it genuinely scrollable instead.** The topic banner sits
+  above `#log` as a plain `Static` and isn't scrollable itself - a huge
+  pasted topic once grew it to 154 rows in a 24-row terminal, crushing the
+  entire conversation down to 2 visible rows. It truncates the *display*
+  (full text still goes to the model/transcript) plus carries a CSS
+  `max-height` + `overflow-y: hidden` backstop. The Current Answer panel
+  hit the same failure mode twice from two different angles - see the entry
+  above - and was fixed differently: made it an actually-scrollable
+  `VerticalScroll` (ctrl+f to expand) instead of truncating, since unlike
+  the topic banner its content is something the user actively wants to
+  read in full, not just skim.
 - **`CollapsibleTitle` defaults to `width: auto`** - only as wide as its
   label text, left-anchored, while the bar rendered on screen spans the
   full container width. Clicking anywhere past the label silently did
