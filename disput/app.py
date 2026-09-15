@@ -66,6 +66,7 @@ class SourceSetupScreen(Screen):
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
         ("e", "edit_highlighted_source", "Edit source"),
+        ("ctrl+s", "submit_details", "Continue"),
     ]
 
     def __init__(self, side_label: str, other_label: str) -> None:
@@ -257,7 +258,15 @@ class SourceSetupScreen(Screen):
             Static("System prompt:"),
             TextArea(prompt, id="prompt-area"),
             Button("Continue", id="details-continue-btn", variant="primary"),
+            Static("[dim]ctrl+s: continue (works even while editing the system prompt)[/dim]"),
         )
+        self.query_one("#label-input", Input).focus()
+
+    def action_submit_details(self) -> None:
+        # Guarded because this binding is screen-wide but only valid on the
+        # details step - harmless no-op on every other step.
+        if self.query("#details-continue-btn"):
+            self.finish_details()
 
     def finish_details(self) -> None:
         label = self.query_one("#label-input", Input).value.strip() or self.chosen_model
@@ -276,6 +285,8 @@ class SourceSetupScreen(Screen):
 class TopicScreen(Screen):
     """Set the starting topic/prompt and how many turns to run."""
 
+    BINDINGS = [("ctrl+s", "submit_topic", "Start dialogue")]
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(" Topic & length ", id="step-title")
@@ -285,6 +296,7 @@ class TopicScreen(Screen):
             Static("How many turns total?"),
             Input(value=str(DEFAULT_ROUNDS), id="rounds-input"),
             Button("Start Dialogue", id="start-btn", variant="primary"),
+            Static("[dim]ctrl+s: start (works even while editing the topic)[/dim]"),
             id="body",
         )
         yield Footer()
@@ -292,6 +304,9 @@ class TopicScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start-btn":
             self.start_dialogue()
+
+    def action_submit_topic(self) -> None:
+        self.start_dialogue()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "rounds-input":
