@@ -422,8 +422,12 @@ class DialogueScreen(Screen):
         ("ctrl+q", "quit_app", "Quit & Save"),
         ("ctrl+g", "abort_turn", "Abort turn"),
         ("ctrl+n", "new_topic", "New topic (same models)"),
+        ("ctrl+f", "toggle_answer_panel", "Expand/collapse answer"),
         ("escape", "fix_broken_model", "Fix model (after an error)"),
     ]
+
+    ANSWER_PANEL_COMPACT_HEIGHT = 8
+    ANSWER_PANEL_EXPANDED_HEIGHT = 20
 
     def __init__(self, cfg_a: ModelConfig, cfg_b: ModelConfig, topic: str, total_rounds: int) -> None:
         super().__init__()
@@ -453,6 +457,8 @@ class DialogueScreen(Screen):
         # turn, not some stale agreement from many turns ago.
         self._converged = {"A": False, "B": False}
         self._usage_tokens = {"A": 0, "B": 0}  # cumulative total_tokens per side
+        self._answer_expanded = False
+        self._final_answer_mounted_for: int | None = None  # turn_no already appended to the log
         self._current_client: OpenAI | None = None
         self._turn_started_at: float | None = None
 
@@ -474,7 +480,10 @@ class DialogueScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(f"[b]Topic:[/b] {self._topic_banner_text()}", id="topic-banner")
-        yield Static(self._answer_panel_text(), id="answer-panel")
+        yield VerticalScroll(
+            Static(self._answer_panel_text(), id="answer-panel-text"),
+            id="answer-panel",
+        )
         yield VerticalScroll(id="log")
         yield Static("", id="status")
         yield Input(placeholder="Type a moderator note and press Enter (or just watch it run)...", id="moderator-input")
@@ -484,7 +493,27 @@ class DialogueScreen(Screen):
         self.query_one("#moderator-input", Input).focus()
         self.set_interval(1.0, self._tick_thinking_status)
         self._update_usage_title()
+        self._apply_answer_panel_height()
         self.take_turn()
+
+    def action_toggle_answer_panel(self) -> None:
+        self._answer_expanded = not self._answer_expanded
+        self._apply_answer_panel_height()
+
+    def _apply_answer_panel_height(self) -> None:
+        # Before there's an actual answer, the panel holds one placeholder
+        # line - reserving a full compact/expanded height for that (rather
+        # than sizing to content) was exactly the bug that crushed the log
+        # with a huge topic: two fixed-height elements above #log, one of
+        # them empty, eating rows for nothing. Only claim real space once
+        # there's something worth showing.
+        panel = self.query_one("#answer-panel")
+        if self._latest_answer is None:
+            panel.styles.height = "auto"
+        elif self._answer_expanded:
+            panel.styles.height = self.ANSWER_PANEL_EXPANDED_HEIGHT
+        else:
+            panel.styles.height = self.ANSWER_PANEL_COMPACT_HEIGHT
 
     # -- turn loop ---------------------------------------------------------
 
@@ -649,7 +678,8 @@ class DialogueScreen(Screen):
         if reply.answer:
             self._latest_answer = reply.answer
             self._latest_answer_meta = (turn_no, cfg.label)
-            self.query_one("#answer-panel", Static).update(self._answer_panel_text())
+            self.query_one("#answer-panel-text", Static).update(self._answer_panel_text())
+            self._apply_answer_panel_height()
             self.transcript_lines.append(
                 f"**✅ Current answer (as of Turn {turn_no} — {cfg.label}):**\n\n{reply.answer}\n"
             )
@@ -664,6 +694,7 @@ class DialogueScreen(Screen):
 
         if self.turn >= self.total_rounds:
             self.awaiting_extend = True
+            self._mount_final_answer_block()
             self.set_status(
                 f"Reached {self.total_rounds} turns. Type a number to extend, or 'stop' to finish "
                 f"(ctrl+q quits and saves; a plain note here is just logged, not treated as 'stop')."
@@ -675,6 +706,7 @@ class DialogueScreen(Screen):
             self._converged["B"] = False
             self.awaiting_extend = True
             self.mount_note("[green]Both models signaled they have nothing more to add.[/green]")
+            self._mount_final_answer_block()
             self.set_status(
                 f"Both models signaled agreement at turn {self.turn} (of your planned "
                 f"{self.total_rounds}). Type a number to add more turns, 'stop' to finish now, or "
@@ -795,23 +827,16 @@ class DialogueScreen(Screen):
             + f"… [{len(topic)} chars total - shown truncated, sent to both models in full]"
         )
 
-    ANSWER_PANEL_PREVIEW_CHARS = 500
-
     def _answer_panel_text(self) -> str:
         if self._latest_answer is None:
             return "[dim]No answer proposed yet.[/dim]"
         turn_no, label = self._latest_answer_meta
-        text = self._latest_answer
-        # Same lesson as the topic banner: this panel isn't scrollable, so
-        # an unbounded answer could crush the log the same way a huge
-        # pasted topic did. Only the on-screen preview is shortened - the
-        # transcript always gets the full, untruncated answer.
-        if len(text) > self.ANSWER_PANEL_PREVIEW_CHARS:
-            text = (
-                text[: self.ANSWER_PANEL_PREVIEW_CHARS].rstrip()
-                + f"… [{len(text)} chars total - see turn {turn_no} in the log for the full text]"
-            )
-        return f"[b]✅ Current answer[/b] (as of Turn {turn_no} — {label}):\n\n{text}"
+        # Unlike the topic banner, this panel lives inside its own
+        # VerticalScroll (id="answer-panel") - it can be scrolled
+        # independently of the main log instead of needing truncation, so
+        # the full answer is always shown here. ctrl+f expands it further
+        # for a longer answer.
+        return f"[b]✅ Current answer[/b] (as of Turn {turn_no} — {label}) - ctrl+f to expand/scroll:\n\n{self._latest_answer}"
 
     def set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(text)
@@ -838,6 +863,28 @@ class DialogueScreen(Screen):
     def mount_note(self, text: str) -> None:
         log = self.query_one("#log", VerticalScroll)
         log.mount(Static(text, classes="note"))
+        log.scroll_end(animate=False)
+
+    def _mount_final_answer_block(self) -> None:
+        """Appends the current answer directly into the scrollable dialogue
+        log as its own clearly-marked block, once, whenever the run pauses
+        (turn limit or mutual convergence) - so it's readable in full as
+        part of the normal scrollback rather than only in the small
+        (though independently scrollable) answer panel above the log."""
+        if self._latest_answer is None:
+            return
+        turn_no, label = self._latest_answer_meta
+        if self._final_answer_mounted_for == turn_no:
+            return  # already appended this exact answer - don't duplicate on a re-trigger
+        self._final_answer_mounted_for = turn_no
+        log = self.query_one("#log", VerticalScroll)
+        log.mount(
+            Vertical(
+                Static(f"[b]🏁 Final Answer[/b] (from Turn {turn_no} — {label}):", classes="final-answer-header"),
+                Markdown(self._latest_answer),
+                classes="turn final-answer",
+            )
+        )
         log.scroll_end(animate=False)
 
     # -- persistence -----------------------------------------------------------
@@ -888,7 +935,13 @@ class DisputApp(App):
        rows on a very narrow terminal - the banner must never be able to
        push the actual conversation log out of view. */
     #topic-banner { padding: 1 2; border-bottom: solid $accent; max-height: 8; overflow-y: hidden; }
-    #answer-panel { padding: 1 2; border-bottom: solid $success; max-height: 10; overflow-y: hidden; }
+    /* height (not max-height) here since action_toggle_answer_panel()
+       sets it directly at runtime to expand/collapse - unlike the topic
+       banner, this one is independently scrollable (VerticalScroll, not a
+       plain Static) so a long answer is reachable by scrolling rather than
+       needing truncation. */
+    #answer-panel { border-bottom: solid $success; }
+    #answer-panel-text { padding: 1 2; }
     #log { padding: 1 2; }
     #status { padding: 0 2; color: $text-muted; height: 1; }
     #moderator-input { margin: 0 1 1 1; }
@@ -902,6 +955,8 @@ class DisputApp(App):
     .turn-header.turn-a { color: $success; }
     .turn-header.turn-b { color: $warning; }
     .note { color: $text-muted; text-style: italic; padding: 0 1; }
+    .final-answer { border-left: thick $success; background: $success 10%; }
+    .final-answer-header { color: $success; }
     /* CollapsibleTitle defaults to width: auto - only as wide as the label
        text itself, left-anchored - while the bar you see spans the full
        container width. Clicking anywhere on that bar past the label did
