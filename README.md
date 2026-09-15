@@ -326,8 +326,7 @@ if __name__ == "__main__":
     main()
 ```
 
-<details>
-<summary>📋 Full reasoning traces - two models debug an LRU cache (3 turns, click to expand)</summary>
+**Full reasoning traces - two models debug an LRU cache (3 turns):**
 
 ````text
 ============================================================
@@ -475,8 +474,6 @@ The user's logic is sound.
 ------------------------------------------------------------
 The user is confirming that the analysis is correct and the proposed fix is right. Let me acknowledge this and wrap up. I should confirm and mark as done since the root cause and fix are agreed upon.
 ````
-
-</details>
 
 ## What it does
 
