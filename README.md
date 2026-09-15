@@ -41,8 +41,7 @@ constraint was satisfied either way - what matters is that the check
 happened at all, unprompted, rather than one model taking the other's math
 on faith.
 
-<details>
-<summary>📋 Full reasoning traces - two models audit a budget allocation (4 turns, click to expand)</summary>
+**Full reasoning traces - two models audit a budget allocation (4 turns):**
 
 ```text
 ============================================================
@@ -206,8 +205,6 @@ The user ended with "All constraints satisfied; allocation is final." This impli
 I should simply confirm the finality and end the dialogue as per the instructions.
 ```
 
-</details>
-
 ## What it does
 
 - Interactively pick (or add) a **source** - an OpenAI-compatible endpoint
@@ -370,9 +367,7 @@ only `ctrl+q` does that unconditionally.
 
 ## Where things live
 
-- `disput/config.py` - saved source presets, stored at
-  `~/.disput/presets.json` (outside the repo, deliberately - so API keys
-  never end up in git even once this repo goes public).
+- `disput/config.py` - saved source presets, stored at `~/.disput/presets.json`.
 - `disput/client.py` - talking to a model, splitting out its reasoning
   trace, extracting code from the final answer.
 - `disput/app.py` - the Textual TUI: the setup wizard and the live
